@@ -72,6 +72,9 @@ int main(void) {
         return 1;
     }
     sd_synth_set_delay(s, 1, 0.1875f, 0.45f, 0.35f);
+    sd_synth_set_reverb(s, 0.8f, 0.4f, 0.3f);
+    sd_synth_set_room(s, 0, 0.3f);
+    sd_synth_set_room(s, 1, 0.5f);
 
     float* out = calloc(FRAMES * 2, sizeof(float));
     check(out != NULL, "output buffer");
@@ -165,6 +168,33 @@ int main(void) {
     printf("peak %.3f  rms %.4f  peak voices %d\n", peak, rms, peak_voices);
     write_wav("beat.wav", out, FRAMES);
     printf("wrote beat.wav (%d s)\n", FRAMES / SR);
+
+    // The tank should still be ringing after the last note, and should settle
+    {
+        sd_note_t n = drum_note(SD_DRUM_SD, 0.9f);
+        sd_synth_note_on(s, &n);
+        for (int i = 0; i < 40; i++) {
+            sd_synth_render(s, out, BLOCK);
+        }
+        float tail = 0.0f;
+        for (uint32_t i = 0; i < BLOCK * 2; i++) {
+            if (fabsf(out[i]) > tail) {
+                tail = fabsf(out[i]);
+            }
+        }
+        check(tail > 0.0f, "reverb leaves a tail after the note");
+        check(tail < 0.5f, "reverb tail decays rather than building up");
+        for (int i = 0; i < 600; i++) {
+            sd_synth_render(s, out, BLOCK);
+        }
+        float settled = 0.0f;
+        for (uint32_t i = 0; i < BLOCK * 2; i++) {
+            if (fabsf(out[i]) > settled) {
+                settled = fabsf(out[i]);
+            }
+        }
+        check(settled < 0.02f, "reverb settles to silence");
+    }
 
     sd_synth_panic(s);
     sd_synth_render(s, out, BLOCK);

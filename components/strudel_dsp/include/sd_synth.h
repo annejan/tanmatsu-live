@@ -80,6 +80,13 @@ void sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames);
 // Per-orbit delay. time_s is clamped to the allocated line length.
 void sd_synth_set_delay(sd_synth_t* s, int orbit, float time_s, float feedback, float mix);
 
+// One shared reverb, fed by a per orbit send. A single tank costs a fraction
+// of a reverb per orbit and is how a mixing desk would do it anyway.
+// size 0..1 is the tail length, damping 0..1 rolls off the highs in the tail,
+// mix 0..1 is how much of the tank reaches the output.
+void sd_synth_set_reverb(sd_synth_t* s, float size, float damping, float mix);
+void sd_synth_set_room(sd_synth_t* s, int orbit, float send);
+
 void sd_synth_set_master(sd_synth_t* s, float gain);
 int  sd_synth_active_voices(sd_synth_t const* s);
 void sd_synth_panic(sd_synth_t* s);  // silence everything immediately

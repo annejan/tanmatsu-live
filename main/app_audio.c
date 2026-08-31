@@ -168,6 +168,19 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
         }
         return false;
     }
+    if (strcmp(head, "reverb") == 0) {
+        float size = 0.6f, damp = 0.4f, mix = 0.25f;
+        sscanf(rest, "%f %f %f", &size, &damp, &mix);
+        sd_synth_set_reverb(synth, size, damp, mix);
+        return false;
+    }
+    if (strcmp(head, "room") == 0) {
+        int   orbit = 0;
+        float send  = 0.3f;
+        sscanf(rest, "%d %f", &orbit, &send);
+        sd_synth_set_room(synth, orbit, send);
+        return false;
+    }
     if (strcmp(head, "delay") == 0) {
         int   orbit = 1;
         float t = 0.1875f, fb = 0.4f, mix = 0.3f;

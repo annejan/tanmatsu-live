@@ -76,7 +76,28 @@ typedef struct {
     uint32_t len;  // frames
     uint32_t wpos;
     float    time_s, feedback, mix;
+    float    room_send;
 } delay_t;
+
+// A Schroeder tank: four damped combs in parallel into two allpass sections.
+// Mono in, spread to stereo on the way out, which costs half the memory of a
+// true stereo tank and is indistinguishable on a badge speaker.
+#define RV_COMBS   4
+#define RV_ALLPASS 2
+
+typedef struct {
+    float*   comb[RV_COMBS];
+    uint32_t comb_len[RV_COMBS];
+    uint32_t comb_pos[RV_COMBS];
+    float    comb_store[RV_COMBS];
+
+    float*   ap[RV_ALLPASS];
+    uint32_t ap_len[RV_ALLPASS];
+    uint32_t ap_pos[RV_ALLPASS];
+
+    float feedback, damping, mix;
+    bool  ready;
+} reverb_t;
 
 struct sd_synth {
     sd_alloc_fn alloc;
@@ -86,6 +107,7 @@ struct sd_synth {
     voice_t     v[SD_MAX_VOICES];
     uint32_t    age_counter;
     delay_t     delay[SD_ORBITS];
+    reverb_t    reverb;
     float*      orbit_mix;  // scratch, stereo interleaved, one block
     uint32_t    orbit_mix_frames;
     float       master;
@@ -345,6 +367,82 @@ sd_synth_t* sd_synth_create_ex(uint32_t sample_rate, sd_alloc_fn alloc, sd_free_
     return s;
 }
 
+// Delay lengths in samples at 48k, mutually prime so the tank does not ring on
+// one pitch. Scaled from the classic 44.1k values.
+static uint32_t const RV_COMB_LEN[RV_COMBS] = {1213, 1291, 1387, 1481};
+static uint32_t const RV_AP_LEN[RV_ALLPASS] = {605, 481};
+
+static bool reverb_alloc(sd_synth_t* s) {
+    reverb_t* r = &s->reverb;
+    if (r->ready) {
+        return true;
+    }
+    float scale = (float)s->sr / 48000.0f;
+    for (int i = 0; i < RV_COMBS; i++) {
+        r->comb_len[i] = (uint32_t)(RV_COMB_LEN[i] * scale);
+        r->comb[i]     = s->alloc((size_t)r->comb_len[i] * sizeof(float), true);
+        if (!r->comb[i]) {
+            return false;
+        }
+    }
+    for (int i = 0; i < RV_ALLPASS; i++) {
+        r->ap_len[i] = (uint32_t)(RV_AP_LEN[i] * scale);
+        r->ap[i]     = s->alloc((size_t)r->ap_len[i] * sizeof(float), true);
+        if (!r->ap[i]) {
+            return false;
+        }
+    }
+    r->ready = true;
+    return true;
+}
+
+static inline float reverb_tick(reverb_t* r, float in) {
+    float acc = 0.0f;
+    for (int i = 0; i < RV_COMBS; i++) {
+        float* b   = r->comb[i];
+        uint32_t p = r->comb_pos[i];
+        float  out = b[p];
+        // One pole lowpass inside the feedback path is what makes a tail decay
+        // rather than turn into noise
+        r->comb_store[i] = out * (1.0f - r->damping) + r->comb_store[i] * r->damping;
+        b[p]             = in + r->comb_store[i] * r->feedback;
+        r->comb_pos[i]   = (p + 1 >= r->comb_len[i]) ? 0 : p + 1;
+        acc += out;
+    }
+    acc *= 1.0f / RV_COMBS;
+
+    for (int i = 0; i < RV_ALLPASS; i++) {
+        float*   b = r->ap[i];
+        uint32_t p = r->ap_pos[i];
+        float    bufout = b[p];
+        float    out    = bufout - acc;
+        b[p]            = acc + bufout * 0.5f;
+        r->ap_pos[i]    = (p + 1 >= r->ap_len[i]) ? 0 : p + 1;
+        acc             = out;
+    }
+    return acc;
+}
+
+void sd_synth_set_reverb(sd_synth_t* s, float size, float damping, float mix) {
+    reverb_t* r = &s->reverb;
+    r->feedback = 0.7f + (size < 0.0f ? 0.0f : (size > 1.0f ? 1.0f : size)) * 0.28f;
+    r->damping  = damping < 0.0f ? 0.0f : (damping > 0.95f ? 0.95f : damping);
+    r->mix      = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
+    if (r->mix > 0.0f) {
+        reverb_alloc(s);
+    }
+}
+
+void sd_synth_set_room(sd_synth_t* s, int orbit, float send) {
+    if (orbit < 0 || orbit >= SD_ORBITS) {
+        return;
+    }
+    s->delay[orbit].room_send = send < 0.0f ? 0.0f : (send > 1.0f ? 1.0f : send);
+    if (send > 0.0f) {
+        reverb_alloc(s);
+    }
+}
+
 void sd_synth_destroy(sd_synth_t* s) {
     if (!s) {
         return;
@@ -353,6 +451,16 @@ void sd_synth_destroy(sd_synth_t* s) {
     for (int i = 0; i < SD_ORBITS; i++) {
         if (s->delay[i].buf) {
             release(s->delay[i].buf);
+        }
+    }
+    for (int i = 0; i < RV_COMBS; i++) {
+        if (s->reverb.comb[i]) {
+            release(s->reverb.comb[i]);
+        }
+    }
+    for (int i = 0; i < RV_ALLPASS; i++) {
+        if (s->reverb.ap[i]) {
+            release(s->reverb.ap[i]);
         }
     }
     if (s->orbit_mix) {
@@ -392,6 +500,21 @@ int sd_synth_active_voices(sd_synth_t const* s) {
     return n;
 }
 
+static void reverb_clear(sd_synth_t* s) {
+    reverb_t* r = &s->reverb;
+    for (int i = 0; i < RV_COMBS; i++) {
+        if (r->comb[i]) {
+            memset(r->comb[i], 0, (size_t)r->comb_len[i] * sizeof(float));
+        }
+        r->comb_store[i] = 0.0f;
+    }
+    for (int i = 0; i < RV_ALLPASS; i++) {
+        if (r->ap[i]) {
+            memset(r->ap[i], 0, (size_t)r->ap_len[i] * sizeof(float));
+        }
+    }
+}
+
 void sd_synth_panic(sd_synth_t* s) {
     for (int i = 0; i < SD_MAX_VOICES; i++) {
         s->v[i].active = false;
@@ -402,6 +525,7 @@ void sd_synth_panic(sd_synth_t* s) {
             memset(s->delay[i].buf, 0, (size_t)s->delay[i].len * 2 * sizeof(float));
         }
     }
+    reverb_clear(s);
 }
 
 // ---------------------------------------------------------------------------
@@ -673,6 +797,24 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
         }
         for (uint32_t i = 0; i < frames * 2; i++) {
             out_lr[i] += bus[i];
+        }
+    }
+
+    reverb_t* rv = &s->reverb;
+    if (rv->ready && rv->mix > 0.0f) {
+        for (uint32_t i = 0; i < frames; i++) {
+            float send = 0.0f;
+            for (int o = 0; o < SD_ORBITS; o++) {
+                if (s->delay[o].room_send <= 0.0f) {
+                    continue;
+                }
+                float const* bus = s->orbit_mix + (size_t)o * frames * 2;
+                send += (bus[i * 2] + bus[i * 2 + 1]) * 0.5f * s->delay[o].room_send;
+            }
+            float wet = reverb_tick(rv, send) * rv->mix;
+            // A little decorrelation so the tail is not dead centre
+            out_lr[i * 2] += wet;
+            out_lr[i * 2 + 1] += wet * 0.92f;
         }
     }
 

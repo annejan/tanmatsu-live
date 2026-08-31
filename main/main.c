@@ -134,6 +134,8 @@ static char const* const tune_liquid[] = {
     "# trancy drum and bass",
     "bpm 174",
     "delay 1 0.1034 0.5 0.34",
+    "reverb 0.7 0.5 0.22",
+    "room 1 0.4",
     "",
     "bd      x.......x.......",
     "sd      ....x.......x...",
@@ -148,9 +150,12 @@ static char const* const tune_liquid[] = {
 
 // Sparse and wet: almost nothing playing, most of the sound is the delay.
 static char const* const tune_dub[] = {
-    "# dub . mostly delay . blue cloud panics if it gets away from you",
+    "# dub . mostly delay and reverb . blue cloud panics",
     "bpm 140",
     "delay 1 0.321 0.62 0.55",
+    "reverb 0.85 0.35 0.40",
+    "room 0 0.25",
+    "room 1 0.55",
     "",
     "bd      x.......x.......",
     "sd:0.5  ............x...",
@@ -279,6 +284,45 @@ static void ed_clamp(void) {
     if (cur_col < 0) {
         cur_col = 0;
     }
+}
+
+// True when the cursor sits inside the step grid part of a line, that is
+// after the head token, in a run of grid characters. Typing there should
+// replace the step under the cursor rather than push everything sideways:
+// changing a hit to an accent is one keystroke, not backspace and retype.
+static bool in_grid_region(void) {
+    char const* line = ed[cur_row];
+    if (line[0] == '#' || line[0] == 0) {
+        return false;
+    }
+    // Find the end of the head token and the start of the pattern
+    int i = 0;
+    while (line[i] && line[i] != ' ' && line[i] != '\t') {
+        i++;
+    }
+    while (line[i] == ' ' || line[i] == '\t') {
+        i++;
+    }
+    int start = i;
+    if (start == 0 || line[start] == 0) {
+        return false;
+    }
+    // The pattern must be a grid: only step characters, no spaces
+    for (int k = start; line[k]; k++) {
+        char ch = line[k];
+        bool ok = ch == 'x' || ch == 'X' || ch == '.' || ch == '~' || ch == '-' || ch == '_' ||
+                  (ch >= '0' && ch <= '9');
+        if (!ok) {
+            return false;
+        }
+    }
+    return cur_col >= start && cur_col < (int)strlen(line);
+}
+
+static void ed_overtype_char(char c) {
+    ed[cur_row][cur_col] = c;
+    cur_col++;
+    dirty = true;
 }
 
 static void ed_insert_char(char c) {
@@ -516,7 +560,8 @@ static void draw_footer(void) {
         x += pax_text_size(FONT, 13, labels[i]).x + 12.0f;
     }
 
-    char const* tail = "esc exit  ^m mute  ^d dup  ^k kill  ^z undo  ^s save  ^o open";
+    char const* tail = in_grid_region() ? "OVR  ^space cycle step  ^m mute  ^z undo  ^s save  ^o open"
+                                        : "esc exit  ^m mute  ^d dup  ^k kill  ^z undo  ^s save  ^o open";
     pax_draw_text(&fb, COL_DIM, FONT, 13, x, bar_y + 4.0f, tail);
     x += pax_text_size(FONT, 13, tail).x + 12.0f;
 
@@ -677,6 +722,26 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
 
 // Commenting a line is how you mute a part without losing it, which during a
 // set matters more than any other edit.
+// Space on a grid steps forward through rest, hit and accent. Holding a
+// position and cycling it is how you audition a change without deciding what
+// the character should be first.
+static bool cycle_step(void) {
+    if (!in_grid_region()) {
+        return false;
+    }
+    char* at = &ed[cur_row][cur_col];
+    switch (*at) {
+        case '.':
+        case '~':
+        case '-':
+        case '_': *at = 'x'; break;
+        case 'x': *at = 'X'; break;
+        default: *at = '.'; break;
+    }
+    dirty = true;
+    return true;
+}
+
 static void toggle_comment(void) {
     undo_push();
     char* line = ed[cur_row];
@@ -803,6 +868,10 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
                 status_error = false;
             }
             dirty = true;
+        } else if (c == ' ') {
+            if (cycle_step()) {
+                do_eval();
+            }
         } else if (c == '/' || lower == 'm') {
             toggle_comment();
             do_eval();
@@ -837,7 +906,11 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
         return;
     }
     if (c >= 32 && c < 127) {
-        ed_insert_char(c);
+        if (c != ' ' && in_grid_region()) {
+            ed_overtype_char(c);
+        } else {
+            ed_insert_char(c);
+        }
     }
 }
 
