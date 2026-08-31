@@ -14,7 +14,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include "sd_frac.h"
 
 #define SD_WORD_LEN 16
@@ -168,4 +167,4 @@ int sd_bjorklund(int k, int n, bool* onsets, int max);
 
 char const* sd_field_name(sd_field_t f);
 // Looks up a control name, returns SD_F_COUNT when unknown.
-sd_field_t sd_field_from_name(char const* name);
+sd_field_t  sd_field_from_name(char const* name);

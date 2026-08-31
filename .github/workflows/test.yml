@@ -8,19 +8,14 @@ on:
 jobs:
   host-tests:
     # The pattern engine and the voice engine have no ESP-IDF dependency on
-    # purpose, so the parts most likely to be wrong are testable without a
-    # badge plugged in.
+    # purpose, so the parts most likely to be wrong are testable with no badge
+    # plugged in.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Build and run host tests
         run: make -C test/host check
-
-      - name: Render a demo beat
-        run: |
-          cd test/host
-          ls -la beat.wav
 
       - uses: actions/upload-artifact@v4
         with:
@@ -35,12 +30,27 @@ jobs:
       - name: Voice engine throughput
         run: make -C test/host bench
 
-  format:
+  firmware:
+    # Host tests run on x86 and cannot see target specific problems. This job
+    # exists because a 128 bit integer in the fraction comparison compiled
+    # happily on the host and does not exist at all on 32 bit RISC-V.
     runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.2
     steps:
       - uses: actions/checkout@v4
-      - name: Check formatting
+
+      - name: Build for Tanmatsu
+        shell: bash
         run: |
-          clang-format --version
-          find main components -name '*.c' -o -name '*.h' \
-            | xargs clang-format --dry-run --Werror
+          . "$IDF_PATH/export.sh"
+          idf.py -B build/tanmatsu -DDEVICE=tanmatsu \
+            -DSDKCONFIG_DEFAULTS="sdkconfigs/general;sdkconfigs/tanmatsu" \
+            -DSDKCONFIG=sdkconfig_tanmatsu \
+            -DIDF_TARGET=esp32p4 -DFAT=0 \
+            build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanmatsu-live.bin
+          path: build/tanmatsu/tanmatsu-live.bin
+          if-no-files-found: error

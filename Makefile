@@ -1,3 +1,9 @@
+# App identity, used by the badgelink upload and by metadata.json
+APP_SLUG ?= com.annejan.tanmatsu-live
+APP_TITLE ?= Tanmatsu Live
+APP_REVISION ?= 1
+APP_BIN ?= tanmatsu-live.bin
+
 # Device parameters
 DEVICE ?= tanmatsu
 PORT ?= /dev/ttyACM0
@@ -69,11 +75,11 @@ badgelink:
 .PHONY: install
 install: build
 install:
-	cd badgelink/tools; ./badgelink.sh appfs upload strudel "Tanmatsu Live" 0 ../../$(BUILD)/strudel.bin
+	cd badgelink/tools; ./badgelink.sh appfs upload $(APP_SLUG) "$(APP_TITLE)" $(APP_REVISION) ../../$(BUILD)/$(APP_BIN)
 
 .PHONY: run
 run:
-	cd badgelink/tools; ./badgelink.sh start strudel
+	cd badgelink/tools; ./badgelink.sh start $(APP_SLUG)
 
 # Preparation
 

@@ -1,10 +1,8 @@
 #include "app_audio.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "bsp/audio.h"
 #include "driver/i2s_std.h"
 #include "esp_heap_caps.h"
@@ -178,7 +176,7 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
         return false;
     }
 
-    out->gain = 0.8f;
+    out->gain   = 0.8f;
     char* colon = strchr(head, ':');
     if (colon) {
         *colon  = 0;
@@ -220,12 +218,12 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
     if (looks_like_grid(rest, restlen)) {
         out->pat = grid_to_pattern(a, rest, restlen);
     } else {
-        char buf[192];
+        char   buf[192];
         size_t n = restlen < sizeof(buf) - 1 ? restlen : sizeof(buf) - 1;
         memcpy(buf, rest, n);
-        buf[n] = 0;
+        buf[n]        = 0;
         char perr[64] = "";
-        out->pat = sd_mini_parse(a, buf, (uint32_t)(editor_line * 7919 + 13), perr, sizeof(perr));
+        out->pat      = sd_mini_parse(a, buf, (uint32_t)(editor_line * 7919 + 13), perr, sizeof(perr));
         if (!out->pat) {
             snprintf(err, errlen, "line %d: %s", editor_line + 1, perr);
             return false;
@@ -556,21 +554,39 @@ void app_audio_set_playing(bool p) {
     }
 }
 
-bool  app_audio_is_playing(void) { return playing; }
-void  app_audio_set_bpm(float v) { bpm_i = v < 20.0f ? 20 : (v > 400.0f ? 400 : (int)(v + 0.5f)); }
-float app_audio_get_bpm(void) { return (float)bpm_i; }
+bool app_audio_is_playing(void) {
+    return playing;
+}
+void app_audio_set_bpm(float v) {
+    bpm_i = v < 20.0f ? 20 : (v > 400.0f ? 400 : (int)(v + 0.5f));
+}
+float app_audio_get_bpm(void) {
+    return (float)bpm_i;
+}
 
 void app_audio_set_master(float g) {
     master = g < 0.0f ? 0.0f : (g > 2.0f ? 2.0f : g);
     sd_synth_set_master(synth, master);
 }
 
-float       app_audio_get_master(void) { return master; }
-int64_t     app_audio_get_step(void) { return cur_step; }
-int         app_audio_get_voices(void) { return voices; }
-float       app_audio_get_load(void) { return load; }
-char const* app_audio_get_error(void) { return parse_error; }
-int         app_audio_get_part_count(void) { return prog.nlines; }
+float app_audio_get_master(void) {
+    return master;
+}
+int64_t app_audio_get_step(void) {
+    return cur_step;
+}
+int app_audio_get_voices(void) {
+    return voices;
+}
+float app_audio_get_load(void) {
+    return load;
+}
+char const* app_audio_get_error(void) {
+    return parse_error;
+}
+int app_audio_get_part_count(void) {
+    return prog.nlines;
+}
 
 int app_audio_get_part_steps(int part) {
     return (part < 0 || part >= prog.nlines) ? 0 : LANE_STEPS;

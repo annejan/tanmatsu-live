@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-
 #include "app_audio.h"
 #include "bsp/device.h"
 #include "bsp/display.h"
@@ -31,14 +30,14 @@ static char const TAG[] = "strudel";
 #define ED_MAX_LINES 24
 #define ED_MAX_COLS  95
 
-#define COL_BG      0xFF101014
-#define COL_PANEL   0xFF1B1B22
-#define COL_TEXT    0xFFE6E6EE
-#define COL_DIM     0xFF6A6A7A
-#define COL_ACCENT  0xFF2FE0A8
-#define COL_WARN    0xFFFF5070
-#define COL_CURSOR  0xFF2FE0A8
-#define COL_STEP_ON 0xFF2FE0A8
+#define COL_BG       0xFF101014
+#define COL_PANEL    0xFF1B1B22
+#define COL_TEXT     0xFFE6E6EE
+#define COL_DIM      0xFF6A6A7A
+#define COL_ACCENT   0xFF2FE0A8
+#define COL_WARN     0xFFFF5070
+#define COL_CURSOR   0xFF2FE0A8
+#define COL_STEP_ON  0xFF2FE0A8
 #define COL_STEP_OFF 0xFF33333F
 #define COL_PLAYHEAD 0xFFFFC24A
 
@@ -57,35 +56,35 @@ static char const TAG[] = "strudel";
 #define ED_TOP    30.0f
 #define LANE_TOP  340.0f
 
-static pax_buf_t     fb                = {0};
+static pax_buf_t     fb          = {0};
 // Panel dimensions, which is what the blit wants. Tanmatsu's ST7701 is mounted
 // portrait and the BSP asks for a 270 degree rotation, so these are NOT the
 // coordinate space you draw in.
-static size_t        disp_w            = 0;
-static size_t        disp_h            = 0;
+static size_t        disp_w      = 0;
+static size_t        disp_h      = 0;
 // Logical dimensions after the pax orientation is applied: what every draw
 // call below is measured against.
-static float         ui_w              = 0.0f;
-static float         ui_h              = 0.0f;
-static QueueHandle_t input_queue       = NULL;
-static float         char_w            = 9.0f;
+static float         ui_w        = 0.0f;
+static float         ui_h        = 0.0f;
+static QueueHandle_t input_queue = NULL;
+static float         char_w      = 9.0f;
 
-static char ed[ED_MAX_LINES][ED_MAX_COLS + 1];
-static int  ed_lines = 0;
-static int  cur_row  = 0;
-static int  cur_col  = 0;
-static bool dirty    = true;
+static char  ed[ED_MAX_LINES][ED_MAX_COLS + 1];
+static int   ed_lines     = 0;
+static int   cur_row      = 0;
+static int   cur_col      = 0;
+static bool  dirty        = true;
 // Partial redraw bookkeeping. Re-rasterising every glyph on every frame is by
 // far the most expensive thing the UI does, so a keystroke repaints only the
 // lines it touched and leaves the rest of the framebuffer alone.
-static bool need_full       = true;
-static int  ed_scroll       = 0;
-static int  dirty_row_a     = -1;
-static int  dirty_row_b     = -1;
-static float ui_draw_ms     = 0.0f;
-static float ui_blit_ms     = 0.0f;
-static char status[64]      = "";
-static bool status_error    = false;
+static bool  need_full    = true;
+static int   ed_scroll    = 0;
+static int   dirty_row_a  = -1;
+static int   dirty_row_b  = -1;
+static float ui_draw_ms   = 0.0f;
+static float ui_blit_ms   = 0.0f;
+static char  status[64]   = "";
+static bool  status_error = false;
 
 static char const* const demo[] = {
     "# orange triangle evaluates . red cross plays . esc exits",
@@ -221,8 +220,8 @@ static void do_eval(void) {
     ed_text(text, sizeof(text));
     app_audio_eval(text);
     char const* err = app_audio_get_error();
-    need_full    = true;
-    status_error = err[0] != 0;
+    need_full       = true;
+    status_error    = err[0] != 0;
     if (status_error) {
         snprintf(status, sizeof(status), "%s", err);
     } else {
@@ -304,9 +303,9 @@ static void draw_lanes(void) {
     if (parts <= 0) {
         return;
     }
-    int64_t step = app_audio_get_step();
-    float   y    = LANE_TOP;
-    float   lane_h = 12.0f;
+    int64_t step      = app_audio_get_step();
+    float   y         = LANE_TOP;
+    float   lane_h    = 12.0f;
     int     max_parts = (int)((ui_h - 24.0f - LANE_TOP) / lane_h);
     if (parts > max_parts) {
         parts = max_parts;
@@ -425,7 +424,7 @@ static void render(void) {
     draw_header();
     draw_lanes();
     dirty_row_a = dirty_row_b = -1;
-    int64_t t1 = esp_timer_get_time();
+    int64_t t1                = esp_timer_get_time();
     blit();
     int64_t t2 = esp_timer_get_time();
 
@@ -579,24 +578,35 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
 
 static pax_buf_type_t pax_format_for(bsp_display_color_format_t fmt) {
     switch (fmt) {
-        case BSP_DISPLAY_COLOR_FORMAT_8_332RGB: return PAX_BUF_8_332RGB;
-        case BSP_DISPLAY_COLOR_FORMAT_16_565RGB: return PAX_BUF_16_565RGB;
-        case BSP_DISPLAY_COLOR_FORMAT_16_4444ARGB: return PAX_BUF_16_4444ARGB;
-        case BSP_DISPLAY_COLOR_FORMAT_32_8888ARGB: return PAX_BUF_32_8888ARGB;
-        case BSP_DISPLAY_COLOR_FORMAT_8_GREY: return PAX_BUF_8_GREY;
-        case BSP_DISPLAY_COLOR_FORMAT_1_GREY: return PAX_BUF_1_GREY;
+        case BSP_DISPLAY_COLOR_FORMAT_8_332RGB:
+            return PAX_BUF_8_332RGB;
+        case BSP_DISPLAY_COLOR_FORMAT_16_565RGB:
+            return PAX_BUF_16_565RGB;
+        case BSP_DISPLAY_COLOR_FORMAT_16_4444ARGB:
+            return PAX_BUF_16_4444ARGB;
+        case BSP_DISPLAY_COLOR_FORMAT_32_8888ARGB:
+            return PAX_BUF_32_8888ARGB;
+        case BSP_DISPLAY_COLOR_FORMAT_8_GREY:
+            return PAX_BUF_8_GREY;
+        case BSP_DISPLAY_COLOR_FORMAT_1_GREY:
+            return PAX_BUF_1_GREY;
         case BSP_DISPLAY_COLOR_FORMAT_24_888RGB:
-        default: return PAX_BUF_24_888RGB;
+        default:
+            return PAX_BUF_24_888RGB;
     }
 }
 
 static pax_orientation_t pax_orientation_for(bsp_display_rotation_t rot) {
     switch (rot) {
-        case BSP_DISPLAY_ROTATION_90: return PAX_O_ROT_CCW;
-        case BSP_DISPLAY_ROTATION_180: return PAX_O_ROT_HALF;
-        case BSP_DISPLAY_ROTATION_270: return PAX_O_ROT_CW;
+        case BSP_DISPLAY_ROTATION_90:
+            return PAX_O_ROT_CCW;
+        case BSP_DISPLAY_ROTATION_180:
+            return PAX_O_ROT_HALF;
+        case BSP_DISPLAY_ROTATION_270:
+            return PAX_O_ROT_CW;
         case BSP_DISPLAY_ROTATION_0:
-        default: return PAX_O_UPRIGHT;
+        default:
+            return PAX_O_UPRIGHT;
     }
 }
 
@@ -624,7 +634,7 @@ void app_main(void) {
 
     bsp_display_color_format_t color_format = 0;
     bsp_display_endianness_t   endianness   = 0;
-    res = bsp_display_get_parameters(&disp_w, &disp_h, &color_format, &endianness);
+    res                                     = bsp_display_get_parameters(&disp_w, &disp_h, &color_format, &endianness);
     if (res == ESP_OK) {
         pax_buf_init(&fb, NULL, disp_w, disp_h, pax_format_for(color_format));
         pax_buf_reversed(&fb, endianness == BSP_DISPLAY_ENDIAN_BIG);
@@ -659,8 +669,8 @@ void app_main(void) {
         // Wait for the first event, then take everything else already queued
         // before drawing. Holding a key or typing fast then costs one redraw
         // instead of one per character.
-        int prev_row   = cur_row;
-        int prev_lines = ed_lines;
+        int               prev_row   = cur_row;
+        int               prev_lines = ed_lines;
         if (xQueueReceive(input_queue, &event, pdMS_TO_TICKS(50)) == pdTRUE) {
             do {
                 switch (event.type) {

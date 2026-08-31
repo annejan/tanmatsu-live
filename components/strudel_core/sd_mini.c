@@ -1,5 +1,4 @@
 #include "sd_mini.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,7 +58,7 @@ static bool parse_num(P* p, double* out) {
     if (p->i == start) {
         return false;
     }
-    char buf[24];
+    char   buf[24];
     size_t n = p->i - start;
     if (n >= sizeof(buf)) {
         return false;
@@ -160,8 +159,8 @@ static sd_pat_t* parse_atom(P* p) {
         }
         // A token that is purely numeric becomes a number, so gain patterns
         // and note offsets work without quoting.
-        char* end = NULL;
-        double dv = strtod(buf, &end);
+        char*  end = NULL;
+        double dv  = strtod(buf, &end);
         if (end && *end == 0 && n > 0) {
             return sd_pure_num(p->a, dv);
         }
@@ -335,7 +334,7 @@ sd_pat_t* sd_mini_parse(sd_arena_t* a, char const* src, uint32_t seed, char* err
     if (!src) {
         return sd_silence(a);
     }
-    P p = {.s = src, .i = 0, .len = strlen(src), .a = a, .err = err, .errlen = errlen, .seed = seed};
+    P         p = {.s = src, .i = 0, .len = strlen(src), .a = a, .err = err, .errlen = errlen, .seed = seed};
     sd_pat_t* r = parse_stack(&p, '\0');
     skip_ws(&p);
     if (!p.failed && p.i < p.len) {

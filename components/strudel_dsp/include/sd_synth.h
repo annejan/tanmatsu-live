@@ -39,20 +39,20 @@ typedef enum {
 typedef struct {
     sd_wave_t wave;
     sd_drum_t drum;
-    float     freq;                      // Hz
-    float     gain;                      // linear, 0..1
-    float     pan;                       // 0 = left, 0.5 = centre, 1 = right
+    float     freq;                             // Hz
+    float     gain;                             // linear, 0..1
+    float     pan;                              // 0 = left, 0.5 = centre, 1 = right
     float     attack, decay, sustain, release;  // seconds; sustain is a level
-    float     dur;                       // seconds of gate before release
-    float     cutoff;                    // Hz; <= 0 bypasses the filter
-    float     resonance;                 // 0..1, maps to Q 0.5..12
-    float     shape;                     // 0..1 waveshaper drive
-    int       orbit;                     // which effect bus, 0..SD_ORBITS-1
+    float     dur;                              // seconds of gate before release
+    float     cutoff;                           // Hz; <= 0 bypasses the filter
+    float     resonance;                        // 0..1, maps to Q 0.5..12
+    float     shape;                            // 0..1 waveshaper drive
+    int       orbit;                            // which effect bus, 0..SD_ORBITS-1
 
     // Sample playback. When smp is non-NULL it replaces the oscillator.
     int16_t const* smp;
-    uint32_t       smp_len;              // frames (mono)
-    float          smp_speed;            // 1.0 = original pitch
+    uint32_t       smp_len;    // frames (mono)
+    float          smp_speed;  // 1.0 = original pitch
 } sd_note_t;
 
 typedef struct sd_synth sd_synth_t;

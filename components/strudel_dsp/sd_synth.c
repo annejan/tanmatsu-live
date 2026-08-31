@@ -1,5 +1,4 @@
 #include "sd_synth.h"
-
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +52,7 @@ typedef struct {
     // Drum. dec_* are running decay values, dk* their per sample multipliers,
     // which replaces an expf call per envelope per sample.
     sd_drum_t drum;
-    float     drum_t;   // seconds since note-on, only the clap still needs it
+    float     drum_t;  // seconds since note-on, only the clap still needs it
     float     dec_a, dec_b, dec_c;
     float     dka, dkb, dkc;
     float     cp_slap;
@@ -67,8 +66,8 @@ typedef struct {
     svf_t filter;
     bool  use_filter;
 
-    float gain, pan_l, pan_r, shape;
-    int   orbit;
+    float    gain, pan_l, pan_r, shape;
+    int      orbit;
     uint32_t rng;
 } voice_t;
 
@@ -82,15 +81,15 @@ typedef struct {
 struct sd_synth {
     sd_alloc_fn alloc;
     sd_free_fn  release;
-    uint32_t sr;
-    float    inv_sr;
-    voice_t  v[SD_MAX_VOICES];
-    uint32_t age_counter;
-    delay_t  delay[SD_ORBITS];
-    float*   orbit_mix;  // scratch, stereo interleaved, one block
-    uint32_t orbit_mix_frames;
-    float    master;
-    uint32_t rng;
+    uint32_t    sr;
+    float       inv_sr;
+    voice_t     v[SD_MAX_VOICES];
+    uint32_t    age_counter;
+    delay_t     delay[SD_ORBITS];
+    float*      orbit_mix;  // scratch, stereo interleaved, one block
+    uint32_t    orbit_mix_frames;
+    float       master;
+    uint32_t    rng;
 };
 
 // ---------------------------------------------------------------------------
@@ -98,11 +97,11 @@ struct sd_synth {
 // ---------------------------------------------------------------------------
 
 static inline uint32_t xorshift(uint32_t* s) {
-    uint32_t x = *s;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    *s = x ? x : 0x1234567u;
+    uint32_t x  = *s;
+    x          ^= x << 13;
+    x          ^= x >> 17;
+    x          ^= x << 5;
+    *s          = x ? x : 0x1234567u;
     return *s;
 }
 
@@ -181,8 +180,12 @@ static inline float osc(voice_t* v) {
     float dt = v->phase_inc;
     float out;
     switch (v->wave) {
-        case SD_WAVE_SINE: out = fast_sin01(p); break;
-        case SD_WAVE_SAW:  out = 2.0f * p - 1.0f - polyblep(p, dt); break;
+        case SD_WAVE_SINE:
+            out = fast_sin01(p);
+            break;
+        case SD_WAVE_SAW:
+            out = 2.0f * p - 1.0f - polyblep(p, dt);
+            break;
         case SD_WAVE_SQUARE: {
             float p2 = p + 0.5f;
             if (p2 >= 1.0f) {
@@ -191,9 +194,15 @@ static inline float osc(voice_t* v) {
             out = (p < 0.5f ? 1.0f : -1.0f) - polyblep(p, dt) + polyblep(p2, dt);
             break;
         }
-        case SD_WAVE_TRI:  out = 4.0f * fabsf(p - 0.5f) - 1.0f; break;
-        case SD_WAVE_NOISE: out = white(&v->rng); break;
-        default: out = 0.0f; break;
+        case SD_WAVE_TRI:
+            out = 4.0f * fabsf(p - 0.5f) - 1.0f;
+            break;
+        case SD_WAVE_NOISE:
+            out = white(&v->rng);
+            break;
+        default:
+            out = 0.0f;
+            break;
     }
     v->phase += dt;
     if (v->phase >= 1.0f) {
@@ -208,7 +217,7 @@ static inline float drum(voice_t* v, float inv_sr) {
     float out = 0.0f;
     switch (v->drum) {
         case SD_DRUM_BD: {
-            float f = 48.0f + 110.0f * v->dec_a;
+            float f   = 48.0f + 110.0f * v->dec_a;
             v->phase += f * inv_sr;
             if (v->phase >= 1.0f) {
                 v->phase -= 1.0f;
@@ -231,7 +240,7 @@ static inline float drum(voice_t* v, float inv_sr) {
         case SD_DRUM_CP: {
             // Three fast slaps then the body, which is what makes it a clap
             if (v->drum_t < 0.033f) {
-                out = svf_hp(&v->filter, white(&v->rng)) * v->dec_b;
+                out         = svf_hp(&v->filter, white(&v->rng)) * v->dec_b;
                 v->cp_slap += inv_sr;
                 if (v->cp_slap >= 0.011f) {
                     v->cp_slap = 0.0f;
@@ -251,7 +260,7 @@ static inline float drum(voice_t* v, float inv_sr) {
             break;
         }
         case SD_DRUM_TOM: {
-            float f = 90.0f + 60.0f * v->dec_a;
+            float f   = 90.0f + 60.0f * v->dec_a;
             v->phase += f * inv_sr;
             if (v->phase >= 1.0f) {
                 v->phase -= 1.0f;
@@ -262,9 +271,9 @@ static inline float drum(voice_t* v, float inv_sr) {
         default:
             break;
     }
-    v->dec_a *= v->dka;
-    v->dec_b *= v->dkb;
-    v->dec_c *= v->dkc;
+    v->dec_a  *= v->dka;
+    v->dec_b  *= v->dkb;
+    v->dec_c  *= v->dkc;
     v->drum_t += inv_sr;
     return out;
 }
@@ -319,10 +328,10 @@ sd_synth_t* sd_synth_create_ex(uint32_t sample_rate, sd_alloc_fn alloc, sd_free_
     }
     s->alloc   = alloc;
     s->release = release;
-    s->sr     = sample_rate;
-    s->inv_sr = 1.0f / (float)sample_rate;
-    s->master = 0.8f;
-    s->rng    = 0xC0FFEEu;
+    s->sr      = sample_rate;
+    s->inv_sr  = 1.0f / (float)sample_rate;
+    s->master  = 0.8f;
+    s->rng     = 0xC0FFEEu;
 
     for (int i = 0; i < SD_ORBITS; i++) {
         s->delay[i].len      = (uint32_t)(SD_DELAY_MAX_S * (float)sample_rate);
@@ -367,10 +376,10 @@ void sd_synth_set_delay(sd_synth_t* s, int orbit, float time_s, float feedback, 
             return;  // no line, no delay; the dry signal still plays
         }
     }
-    float max = (float)d->len * s->inv_sr - 0.001f;
-    d->time_s    = time_s < 0.001f ? 0.001f : (time_s > max ? max : time_s);
-    d->feedback  = feedback < 0.0f ? 0.0f : (feedback > 0.95f ? 0.95f : feedback);
-    d->mix       = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
+    float max   = (float)d->len * s->inv_sr - 0.001f;
+    d->time_s   = time_s < 0.001f ? 0.001f : (time_s > max ? max : time_s);
+    d->feedback = feedback < 0.0f ? 0.0f : (feedback > 0.95f ? 0.95f : feedback);
+    d->mix      = mix < 0.0f ? 0.0f : (mix > 1.0f ? 1.0f : mix);
 }
 
 int sd_synth_active_voices(sd_synth_t const* s) {
@@ -452,8 +461,8 @@ void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
         v->smp_inc = n->smp_speed > 0.0f ? n->smp_speed : 1.0f;
     }
 
-    v->gain  = n->gain > 0.0f ? n->gain : 0.8f;
-    v->shape = n->shape;
+    v->gain   = n->gain > 0.0f ? n->gain : 0.8f;
+    v->shape  = n->shape;
     float pan = n->pan;
     if (pan < 0.0f) {
         pan = 0.0f;
@@ -466,10 +475,10 @@ void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
     v->pan_r = sinf(pan * 0.5f * (float)M_PI);
     v->orbit = (n->orbit >= 0 && n->orbit < SD_ORBITS) ? n->orbit : 0;
 
-    v->sustain  = n->sustain > 0.0f ? n->sustain : (v->drum ? 0.0f : 0.7f);
-    v->atk_rate = rate_from_time(n->attack, s->inv_sr);
-    v->dec_rate = rate_from_time(n->decay > 0.0f ? n->decay : 0.1f, s->inv_sr);
-    v->rel_rate = rate_from_time(n->release > 0.0f ? n->release : 0.05f, s->inv_sr);
+    v->sustain   = n->sustain > 0.0f ? n->sustain : (v->drum ? 0.0f : 0.7f);
+    v->atk_rate  = rate_from_time(n->attack, s->inv_sr);
+    v->dec_rate  = rate_from_time(n->decay > 0.0f ? n->decay : 0.1f, s->inv_sr);
+    v->rel_rate  = rate_from_time(n->release > 0.0f ? n->release : 0.05f, s->inv_sr);
     v->gate_left = n->dur > 0.0f ? n->dur : 0.1f;
     v->stage     = ENV_ATTACK;
     v->env       = 0.0f;
@@ -483,11 +492,20 @@ void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
         v->gate_left = 1.5f;
         // The noise based drums reuse the voice filter as a fixed high pass
         switch (v->drum) {
-            case SD_DRUM_HH:  svf_set(&v->filter, 7500.0f, 0.8f, (float)s->sr); break;
-            case SD_DRUM_OH:  svf_set(&v->filter, 6000.0f, 0.8f, (float)s->sr); break;
-            case SD_DRUM_CP:  svf_set(&v->filter, 1200.0f, 1.2f, (float)s->sr); break;
-            case SD_DRUM_SD:  svf_set(&v->filter, 900.0f, 0.9f, (float)s->sr); break;
-            default: break;
+            case SD_DRUM_HH:
+                svf_set(&v->filter, 7500.0f, 0.8f, (float)s->sr);
+                break;
+            case SD_DRUM_OH:
+                svf_set(&v->filter, 6000.0f, 0.8f, (float)s->sr);
+                break;
+            case SD_DRUM_CP:
+                svf_set(&v->filter, 1200.0f, 1.2f, (float)s->sr);
+                break;
+            case SD_DRUM_SD:
+                svf_set(&v->filter, 900.0f, 0.9f, (float)s->sr);
+                break;
+            default:
+                break;
         }
         v->use_filter = false;  // the drum code drives the filter itself
 
@@ -504,20 +522,27 @@ void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
                 v->dkb = decay_coef(30.0f, isr);
                 v->dkc = decay_coef(22.0f, isr);
                 break;
-            case SD_DRUM_HH: v->dkb = decay_coef(130.0f, isr); break;
-            case SD_DRUM_OH: v->dkb = decay_coef(14.0f, isr); break;
+            case SD_DRUM_HH:
+                v->dkb = decay_coef(130.0f, isr);
+                break;
+            case SD_DRUM_OH:
+                v->dkb = decay_coef(14.0f, isr);
+                break;
             case SD_DRUM_CP:
-                v->dkb = decay_coef(480.0f, isr);
-                v->dkc = decay_coef(26.0f, isr);
+                v->dkb   = decay_coef(480.0f, isr);
+                v->dkc   = decay_coef(26.0f, isr);
                 // Pre-wound so the body starts at full level at t = 33 ms
                 v->dec_c = expf(0.033f * 26.0f);
                 break;
-            case SD_DRUM_RIM: v->dkb = decay_coef(160.0f, isr); break;
+            case SD_DRUM_RIM:
+                v->dkb = decay_coef(160.0f, isr);
+                break;
             case SD_DRUM_TOM:
                 v->dka = decay_coef(30.0f, isr);
                 v->dkb = decay_coef(11.0f, isr);
                 break;
-            default: break;
+            default:
+                break;
         }
     } else if (n->cutoff > 0.0f) {
         float q = 0.5f + (n->resonance < 0.0f ? 0.0f : (n->resonance > 1.0f ? 1.0f : n->resonance)) * 11.5f;
@@ -546,7 +571,8 @@ static inline float env_step(voice_t* v, float inv_sr) {
                 v->stage = ENV_SUSTAIN;
             }
             break;
-        case ENV_SUSTAIN: break;
+        case ENV_SUSTAIN:
+            break;
         case ENV_RELEASE:
             v->env -= v->rel_rate;
             if (v->env <= 0.0f) {
@@ -601,10 +627,10 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
                     v->active = false;
                     break;
                 }
-                float frac = v->smp_pos - (float)idx;
-                float a    = (float)v->smp[idx] * (1.0f / 32768.0f);
-                float b    = (float)v->smp[idx + 1] * (1.0f / 32768.0f);
-                raw        = a + (b - a) * frac;
+                float frac  = v->smp_pos - (float)idx;
+                float a     = (float)v->smp[idx] * (1.0f / 32768.0f);
+                float b     = (float)v->smp[idx + 1] * (1.0f / 32768.0f);
+                raw         = a + (b - a) * frac;
                 v->smp_pos += v->smp_inc;
             } else {
                 raw = osc(v);
@@ -617,7 +643,7 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
                 raw = shaper(raw, v->shape);
             }
 
-            float amp = env_step(v, s->inv_sr) * v->gain;
+            float amp       = env_step(v, s->inv_sr) * v->gain;
             bus[i * 2]     += raw * amp * v->pan_l;
             bus[i * 2 + 1] += raw * amp * v->pan_r;
         }
@@ -635,14 +661,14 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
                 dsamp = d->len - 1;
             }
             for (uint32_t i = 0; i < frames; i++) {
-                uint32_t rpos = (d->wpos + d->len - dsamp) % d->len;
-                float    dl   = d->buf[rpos * 2];
-                float    dr   = d->buf[rpos * 2 + 1];
-                d->buf[d->wpos * 2]     = bus[i * 2] + dl * d->feedback;
-                d->buf[d->wpos * 2 + 1] = bus[i * 2 + 1] + dr * d->feedback;
-                d->wpos                 = (d->wpos + 1) % d->len;
-                bus[i * 2] += dl * d->mix;
-                bus[i * 2 + 1] += dr * d->mix;
+                uint32_t rpos            = (d->wpos + d->len - dsamp) % d->len;
+                float    dl              = d->buf[rpos * 2];
+                float    dr              = d->buf[rpos * 2 + 1];
+                d->buf[d->wpos * 2]      = bus[i * 2] + dl * d->feedback;
+                d->buf[d->wpos * 2 + 1]  = bus[i * 2 + 1] + dr * d->feedback;
+                d->wpos                  = (d->wpos + 1) % d->len;
+                bus[i * 2]              += dl * d->mix;
+                bus[i * 2 + 1]          += dr * d->mix;
             }
         }
         for (uint32_t i = 0; i < frames * 2; i++) {

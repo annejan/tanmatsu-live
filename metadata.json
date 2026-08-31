@@ -1,0 +1,27 @@
+{
+    "name": "Tanmatsu Live",
+    "description": "Live coding music instrument. Type patterns on the keyboard and hear them change without stopping the beat.",
+    "categories": [
+        "music",
+        "multimedia"
+    ],
+    "version": "0.1.0",
+    "icon": {
+        "16x16": "icon16.png",
+        "32x32": "icon32.png",
+        "64x64": "icon64.png"
+    },
+    "author": "Anne Jan Brouwer",
+    "license_type": "MIT",
+    "application": [
+        {
+            "targets": [
+                "tanmatsu",
+                "konsool"
+            ],
+            "revision": 1,
+            "type": "appfs",
+            "executable": "tanmatsu-live.bin"
+        }
+    ]
+}

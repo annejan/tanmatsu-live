@@ -1,5 +1,4 @@
 #include "sd_pattern.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,7 +25,7 @@ void* sd_arena_alloc(sd_arena_t* a, size_t bytes) {
         a->exhausted = true;
         return NULL;
     }
-    void* p = a->buf + a->used;
+    void* p  = a->buf + a->used;
     a->used += aligned;
     memset(p, 0, aligned);
     return p;
@@ -54,16 +53,16 @@ typedef enum {
 } ptype_t;
 
 struct sd_pat {
-    ptype_t     type;
-    sd_pat_t**  kids;
-    sd_frac_t*  w;
-    int         nkids;
-    sd_frac_t   a;           // fast factor, or shift amount
-    int         i0, i1, i2;  // euclid k/n/rot, iter n, segment n, ctrl field
-    double      d0;          // degrade probability
-    uint32_t    seed;
-    sd_hval_t*  val;  // PURE only, kept out of line to keep nodes small
-    sd_op_t     op;
+    ptype_t    type;
+    sd_pat_t** kids;
+    sd_frac_t* w;
+    int        nkids;
+    sd_frac_t  a;           // fast factor, or shift amount
+    int        i0, i1, i2;  // euclid k/n/rot, iter n, segment n, ctrl field
+    double     d0;          // degrade probability
+    uint32_t   seed;
+    sd_hval_t* val;  // PURE only, kept out of line to keep nodes small
+    sd_op_t    op;
 };
 
 static sd_pat_t* node(sd_arena_t* a, ptype_t t) {
@@ -172,7 +171,7 @@ static sd_pat_t* unary(sd_arena_t* a, ptype_t t, sd_pat_t* p) {
     if (!q) {
         return NULL;
     }
-    q->kids = copy_kids(a, &p, 1);
+    q->kids  = copy_kids(a, &p, 1);
     q->nkids = 1;
     return q->kids ? q : NULL;
 }
@@ -308,14 +307,14 @@ static int64_t floordiv(int64_t a, int64_t b) {
 }
 
 static double hash01(sd_frac_t t, uint32_t seed) {
-    uint64_t x = (uint64_t)t.n * 0x9E3779B97F4A7C15ull;
-    x ^= (uint64_t)t.d << 32;
-    x ^= (uint64_t)seed * 0xBF58476D1CE4E5B9ull;
-    x ^= x >> 30;
-    x *= 0xBF58476D1CE4E5B9ull;
-    x ^= x >> 27;
-    x *= 0x94D049BB133111EBull;
-    x ^= x >> 31;
+    uint64_t x  = (uint64_t)t.n * 0x9E3779B97F4A7C15ull;
+    x          ^= (uint64_t)t.d << 32;
+    x          ^= (uint64_t)seed * 0xBF58476D1CE4E5B9ull;
+    x          ^= x >> 30;
+    x          *= 0xBF58476D1CE4E5B9ull;
+    x          ^= x >> 27;
+    x          *= 0x94D049BB133111EBull;
+    x          ^= x >> 31;
     return (double)(x >> 11) / 9007199254740992.0;
 }
 
@@ -486,8 +485,8 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
                 if (f == SD_F_S) {
                     if (v->bare.type == SD_V_WORD) {
                         memcpy(v->s, v->bare.word, sizeof(v->s));
-                        v->sidx = v->bare.idx;
-                        v->set |= (1u << SD_F_S);
+                        v->sidx  = v->bare.idx;
+                        v->set  |= (1u << SD_F_S);
                     }
                 } else {
                     float x = 0.0f;
@@ -502,8 +501,8 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
                     } else {
                         continue;
                     }
-                    v->f[f] = x;
-                    v->set |= (1u << f);
+                    v->f[f]  = x;
+                    v->set  |= (1u << f);
                 }
             }
             return;
@@ -548,7 +547,7 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
     }
 
     // Everything below reasons one cycle at a time
-    sd_frac_t b = span.b;
+    sd_frac_t b          = span.b;
     bool      zero_width = sd_eq(span.b, span.e);
     do {
         sd_frac_t nb    = sd_add(sd_floor(b), sd_int(1));
@@ -604,13 +603,13 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
             }
 
             case P_SLOWCAT: {
-                int64_t ci     = sd_floori(b);
-                int     n      = p->nkids;
-                int     idx    = (int)(((ci % n) + n) % n);
-                int64_t offset = ci - floordiv(ci, n);
-                sd_frac_t o    = sd_int(offset);
-                sd_span_t q    = {sd_sub(piece.b, o), sd_sub(piece.e, o)};
-                int       mark = out->n;
+                int64_t   ci     = sd_floori(b);
+                int       n      = p->nkids;
+                int       idx    = (int)(((ci % n) + n) % n);
+                int64_t   offset = ci - floordiv(ci, n);
+                sd_frac_t o      = sd_int(offset);
+                sd_span_t q      = {sd_sub(piece.b, o), sd_sub(piece.e, o)};
+                int       mark   = out->n;
                 sd_query(p->kids[idx], q, out);
                 remap(out, mark, sd_int(1), o, NULL);
                 break;
@@ -623,7 +622,7 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
                 int       mark  = out->n;
                 sd_query(p->kids[0], q, out);
                 for (int i = mark; i < out->n; i++) {
-                    sd_hap_t* h = &out->haps[i];
+                    sd_hap_t* h  = &out->haps[i];
                     sd_frac_t pb = sd_sub(pivot, h->part.e), pe2 = sd_sub(pivot, h->part.b);
                     h->part.b = pb;
                     h->part.e = pe2;
@@ -689,8 +688,8 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
 // ---------------------------------------------------------------------------
 
 static char const* const field_names[SD_F_COUNT] = {
-    "s",     "n",      "note",    "gain",  "pan",   "speed",  "cutoff", "resonance", "attack",
-    "decay", "sustain", "release", "room",  "delay", "shape",  "orbit",  "legato",
+    "s",     "n",       "note",    "gain", "pan",   "speed", "cutoff", "resonance", "attack",
+    "decay", "sustain", "release", "room", "delay", "shape", "orbit",  "legato",
 };
 
 char const* sd_field_name(sd_field_t f) {

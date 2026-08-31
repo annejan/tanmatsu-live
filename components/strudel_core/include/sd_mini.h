@@ -15,7 +15,6 @@
 #pragma once
 
 #include <stddef.h>
-
 #include "sd_pattern.h"
 
 // Parses src into a pattern allocated from a. Returns NULL and fills err on a

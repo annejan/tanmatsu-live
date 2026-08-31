@@ -21,25 +21,25 @@ esp_err_t app_audio_start(void);
 // a typo never stops the music.
 void app_audio_eval(char const* text);
 
-void app_audio_set_playing(bool playing);
-bool app_audio_is_playing(void);
-void app_audio_set_bpm(float bpm);
+void  app_audio_set_playing(bool playing);
+bool  app_audio_is_playing(void);
+void  app_audio_set_bpm(float bpm);
 float app_audio_get_bpm(void);
-void app_audio_set_master(float gain);
+void  app_audio_set_master(float gain);
 float app_audio_get_master(void);
 
 // Playhead position in sixteenth steps since the transport started.
 int64_t app_audio_get_step(void);
 int     app_audio_get_voices(void);
 // Fraction of the audio budget used by the last render, 0..1 and up.
-float app_audio_get_load(void);
+float   app_audio_get_load(void);
 
 // Parse status of the last app_audio_eval. Empty string means no error.
 char const* app_audio_get_error(void);
 // Number of lines the last app_audio_eval turned into playing parts.
-int app_audio_get_line_count(void);
+int         app_audio_get_line_count(void);
 // Step length of a parsed line, 0 if that editor line is not a part.
-int app_audio_get_line_steps(int editor_line);
+int         app_audio_get_line_steps(int editor_line);
 
 // Read the parsed program, for drawing the step lanes.
 int  app_audio_get_part_count(void);
