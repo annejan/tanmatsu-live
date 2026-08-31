@@ -57,6 +57,9 @@ static int        arena_live = 0;
 
 static seq_prog_t prog;
 static seq_prog_t prog_scratch;
+static seq_prog_t prog_next;
+static volatile bool prog_pending = false;
+static int           arena_next   = 1;
 
 static volatile bool    playing  = false;
 static volatile int     bpm_i    = 124;
@@ -269,7 +272,11 @@ void app_audio_eval(char const* text) {
         return;
     }
     char err[sizeof(parse_error)] = "";
-    int  spare                    = 1 - arena_live;
+    // Never reuse the arena a queued program is sitting in
+    int spare = 1 - arena_live;
+    if (prog_pending && spare == arena_next) {
+        spare = arena_live;  // the queued one is about to become live anyway
+    }
     sd_arena_reset(&arenas[spare]);
     memset(&prog_scratch, 0, sizeof(prog_scratch));
 
@@ -302,8 +309,16 @@ void app_audio_eval(char const* text) {
     }
 
     xSemaphoreTake(prog_mutex, portMAX_DELAY);
-    prog       = prog_scratch;
-    arena_live = spare;
+    if (playing) {
+        // Hand it to the audio task, which will swap it in on the bar line
+        prog_next    = prog_scratch;
+        arena_next   = spare;
+        prog_pending = true;
+    } else {
+        prog         = prog_scratch;
+        arena_live   = spare;
+        prog_pending = false;
+    }
     xSemaphoreGive(prog_mutex);
 
     strncpy(parse_error, err, sizeof(parse_error) - 1);
@@ -456,8 +471,16 @@ static void audio_task(void* arg) {
         if (play) {
             sd_frac_t c0 = cycle_at(pos, bpm);
             sd_frac_t c1 = cycle_at(pos + BLOCK, bpm);
-            nev          = gather(c0, c1, bpm);
-            cur_step     = (int64_t)(sd_todouble(c0) * LANE_STEPS);
+
+            // A queued program lands on the bar line, never mid phrase
+            if (prog_pending && sd_floori(c1) > sd_floori(c0)) {
+                prog         = prog_next;
+                arena_live   = arena_next;
+                prog_pending = false;
+            }
+
+            nev      = gather(c0, c1, bpm);
+            cur_step = (int64_t)(sd_todouble(c0) * LANE_STEPS);
         }
 
         uint32_t done = 0;
@@ -565,6 +588,10 @@ void app_audio_set_playing(bool p) {
     if (!p) {
         sd_synth_panic(synth);
     }
+}
+
+bool app_audio_pending(void) {
+    return prog_pending;
 }
 
 bool app_audio_is_playing(void) {

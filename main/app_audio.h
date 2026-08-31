@@ -21,6 +21,11 @@ esp_err_t app_audio_start(void);
 // a typo never stops the music.
 void app_audio_eval(char const* text);
 
+// An evaluation does not take effect in the middle of a bar. The new program is
+// parsed immediately and swapped in at the next cycle boundary, which is what
+// makes editing while playing sound deliberate rather than accidental.
+bool app_audio_pending(void);
+
 void  app_audio_set_playing(bool playing);
 bool  app_audio_is_playing(void);
 void  app_audio_set_bpm(float bpm);

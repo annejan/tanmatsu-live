@@ -181,6 +181,10 @@ static int save_slot  = 0;
 // A picker over the built in tunes and the saved slots, so loading something
 // means reading its name rather than remembering a number.
 #define BROWSER_ENTRIES (PRESET_COUNT + APP_STORE_SLOTS)
+// Escape must be pressed twice to leave. A single stray keypress ending a set
+// is the worst thing this program could do, and the badge has no other way out.
+static int64_t esc_armed_us = 0;
+static bool    help_open    = false;
 static bool browser_open = false;
 static int  browser_sel  = 0;
 static char browser_label[BROWSER_ENTRIES][52];
@@ -406,6 +410,8 @@ static void do_eval(void) {
     status_error    = err[0] != 0;
     if (status_error) {
         snprintf(status, sizeof(status), "%s", err);
+    } else if (app_audio_pending()) {
+        snprintf(status, sizeof(status), "queued for the next bar");
     } else {
         snprintf(status, sizeof(status), "%d parts playing", app_audio_get_part_count());
     }
@@ -431,6 +437,9 @@ static void draw_header(void) {
     snprintf(info, sizeof(info), "%s  %3.0f bpm  %2dv  dsp %2.0f%%  ui %.0f+%.0fms",
              app_audio_is_playing() ? "PLAY" : "STOP", app_audio_get_bpm(), app_audio_get_voices(),
              app_audio_get_load() * 100.0f, (double)ui_draw_ms, (double)ui_blit_ms);
+    if (app_audio_pending()) {
+        pax_draw_text(&fb, COL_PLAYHEAD, FONT, FONT_SIZE, 118, 5, "QUEUED");
+    }
     pax_vec2f size = pax_text_size(FONT, FONT_SIZE, info);
     pax_draw_text(&fb, app_audio_is_playing() ? COL_TEXT : COL_DIM, FONT, FONT_SIZE, ui_w - size.x - 6, 5, info);
 }
@@ -567,8 +576,8 @@ static void draw_footer(void) {
         x += pax_text_size(FONT, 13, labels[i]).x + 12.0f;
     }
 
-    char const* tail = in_grid_region() ? "OVR  ^space cycle step  ^m mute  ^z undo  ^s save  ^o open"
-                                        : "esc exit  ^m mute  ^d dup  ^k kill  ^z undo  ^s save  ^o open";
+    char const* tail = in_grid_region() ? "OVR   ^space cycle   ^m mute   ^o load   ^h keys"
+                                        : "^h keys   ^m mute   ^d dup   ^z undo   ^s save   ^o load";
     pax_draw_text(&fb, COL_DIM, FONT, 13, x, bar_y + 4.0f, tail);
     x += pax_text_size(FONT, 13, tail).x + 12.0f;
 
@@ -606,6 +615,47 @@ static void draw_browser(void) {
     }
 }
 
+// Nobody carries a manual to a gig, so the bindings live one keystroke away.
+static void draw_help(void) {
+    static char const* const rows[] = {
+        "red cross      play / stop",
+        "orange tri     evaluate  (also ctrl+enter)",
+        "yellow square  tempo down",
+        "green circle   tempo up",
+        "blue cloud     panic, stop every voice",
+        "purple diamond next starter tune",
+        "",
+        "ctrl+o         load a tune or a saved set",
+        "ctrl+s         save to the current slot",
+        "ctrl+1 to 8    choose a save slot",
+        "",
+        "ctrl+m  or  /  mute this line",
+        "alt+1 to 8     mute part N wherever the cursor is",
+        "ctrl+d         duplicate line",
+        "ctrl+k         delete line",
+        "ctrl+z         undo",
+        "alt+up/down    move this line",
+        "ctrl+space     cycle step under the cursor",
+        "",
+        "esc esc        leave the app",
+    };
+    int   n = (int)(sizeof(rows) / sizeof(rows[0]));
+    float w = 420.0f;
+    float h = (float)n * 18.0f + 44.0f;
+    float x = (ui_w - w) * 0.5f;
+    float y = (ui_h - h) * 0.5f;
+
+    pax_simple_rect(&fb, COL_BG, x - 2, y - 2, w + 4, h + 4);
+    pax_simple_rect(&fb, COL_PANEL, x, y, w, h);
+    pax_simple_rect(&fb, COL_ACCENT, x, y, w, 2);
+    pax_draw_text(&fb, COL_ACCENT, FONT, 14, x + 10, y + 8, "keys");
+    pax_draw_text(&fb, COL_DIM, FONT, 12, x + w - 96, y + 9, "any key closes");
+
+    for (int i = 0; i < n; i++) {
+        pax_draw_text(&fb, rows[i][0] ? COL_TEXT : COL_DIM, FONT, 13, x + 14, y + 32.0f + (float)i * 18.0f, rows[i]);
+    }
+}
+
 static void render(void) {
     if (pax_buf_get_width(&fb) == 0) {
         return;
@@ -617,7 +667,7 @@ static void render(void) {
         need_full = true;  // everything shifted, nothing can be reused
     }
 
-    if (need_full || browser_open) {
+    if (need_full || browser_open || help_open) {
         pax_background(&fb, COL_BG);
         draw_editor();
         draw_footer();
@@ -634,6 +684,9 @@ static void render(void) {
     if (browser_open) {
         draw_browser();
     }
+    if (help_open) {
+        draw_help();
+    }
     dirty_row_a = dirty_row_b = -1;
     int64_t t1                = esp_timer_get_time();
     blit();
@@ -649,6 +702,8 @@ static void render(void) {
 // ---------------------------------------------------------------------------
 
 static void do_load(void);
+static void move_line(int delta);
+static void mute_part(int part);
 
 static void browser_choose(void) {
     browser_open = false;
@@ -695,9 +750,30 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
         return;
     }
     bool ctrl = (nav->modifiers & BSP_INPUT_MODIFIER_CTRL) != 0;
+    bool alt  = (nav->modifiers & BSP_INPUT_MODIFIER_ALT) != 0;
+
+    if (help_open) {
+        help_open = false;
+        need_full = true;
+        dirty     = true;
+        return;
+    }
+
+    // Rearranging parts is part of arranging, so it gets a chord that does not
+    // need the mouse hand the badge does not have
+    if (alt && (nav->key == BSP_INPUT_NAVIGATION_KEY_UP || nav->key == BSP_INPUT_NAVIGATION_KEY_DOWN)) {
+        move_line(nav->key == BSP_INPUT_NAVIGATION_KEY_UP ? -1 : 1);
+        do_eval();
+        return;
+    }
 
     switch (nav->key) {
         case BSP_INPUT_NAVIGATION_KEY_LEFT:
+            if (ctrl) {
+                cur_col = 0;
+                dirty   = true;
+                break;
+            }
             if (cur_col > 0) {
                 cur_col--;
             } else if (cur_row > 0) {
@@ -707,6 +783,11 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
             dirty = true;
             break;
         case BSP_INPUT_NAVIGATION_KEY_RIGHT:
+            if (ctrl) {
+                cur_col = (int)strlen(ed[cur_row]);
+                dirty   = true;
+                break;
+            }
             if (cur_col < (int)strlen(ed[cur_row])) {
                 cur_col++;
             } else if (cur_row + 1 < ed_lines) {
@@ -785,11 +866,19 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
             app_audio_set_master(app_audio_get_master() - 0.05f);
             dirty = true;
             break;
-        case BSP_INPUT_NAVIGATION_KEY_ESC:
-            // The launcher uses ESC for back, and Tanmatsu has no key above F6
-            app_audio_set_playing(false);
-            bsp_device_restart_to_launcher();
+        case BSP_INPUT_NAVIGATION_KEY_ESC: {
+            int64_t now = esp_timer_get_time();
+            if (esc_armed_us && now - esc_armed_us < 2000000) {
+                app_audio_set_playing(false);
+                bsp_device_restart_to_launcher();
+                break;
+            }
+            esc_armed_us = now;
+            snprintf(status, sizeof(status), "esc again to exit");
+            status_error = true;
+            dirty        = true;
             break;
+        }
         default:
             break;
     }
@@ -877,6 +966,40 @@ static void kill_line(void) {
     need_full = true;
 }
 
+// Mute the Nth playing part wherever the cursor happens to be. During a set
+// the thing you want to silence is rarely the line you are editing.
+static void mute_part(int part) {
+    int line = app_audio_get_part_editor_line(part);
+    if (line < 0 || line >= ed_lines) {
+        return;
+    }
+    int saved_row = cur_row;
+    int saved_col = cur_col;
+    cur_row       = line;
+    cur_col       = 0;
+    toggle_comment();
+    cur_row = saved_row;
+    cur_col = saved_col;
+    ed_clamp();
+    do_eval();
+    snprintf(status, sizeof(status), "part %d %s", part + 1, ed[line][0] == '#' ? "muted" : "on");
+    status_error = false;
+}
+
+static void move_line(int delta) {
+    int target = cur_row + delta;
+    if (target < 0 || target >= ed_lines) {
+        return;
+    }
+    undo_push();
+    char tmp[ED_MAX_COLS + 1];
+    memcpy(tmp, ed[cur_row], sizeof(tmp));
+    memcpy(ed[cur_row], ed[target], sizeof(tmp));
+    memcpy(ed[target], tmp, sizeof(tmp));
+    cur_row   = target;
+    need_full = true;
+}
+
 static void browser_refresh(void) {
     for (int i = 0; i < PRESET_COUNT; i++) {
         snprintf(browser_label[i], sizeof(browser_label[i]), "tune  %s", presets[i].name);
@@ -938,6 +1061,12 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
     // drop anything multi byte since the buffer and the parser are ASCII.
     char c = kb->ascii;
 
+    // Alt plus a digit mutes that part outright, no cursor movement involved
+    if ((kb->modifiers & BSP_INPUT_MODIFIER_ALT) && c >= '1' && c <= '8') {
+        mute_part(c - '1');
+        return;
+    }
+
     // Ctrl shortcuts never reach the buffer as text
     if (kb->modifiers & BSP_INPUT_MODIFIER_CTRL) {
         char lower = (char)(c | 0x20);
@@ -955,6 +1084,10 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
         } else if (lower == 'k') {
             kill_line();
             do_eval();
+        } else if (lower == 'h') {
+            help_open = !help_open;
+            need_full = true;
+            dirty     = true;
         } else if (lower == 'z') {
             if (undo_pop()) {
                 ed_clamp();
