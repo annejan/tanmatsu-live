@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "app_audio.h"
+#include "app_store.h"
 #include "bsp/device.h"
 #include "bsp/display.h"
 #include "bsp/input.h"
@@ -86,7 +87,15 @@ static float ui_blit_ms   = 0.0f;
 static char  status[64]   = "";
 static bool  status_error = false;
 
-static char const* const demo[] = {
+// Starter tunes. Each is a normal editor buffer, so everything here is
+// something you could have typed, and everything here can be edited live.
+typedef struct {
+    char const*        name;
+    char const* const* lines;
+    int                count;
+} preset_t;
+
+static char const* const tune_house[] = {
     "# orange triangle evaluates . red cross plays . esc exits",
     "bpm 128",
     "delay 1 0.1875 0.42 0.30",
@@ -102,20 +111,86 @@ static char const* const demo[] = {
     "square:0.06:2600    ~ <c5 eb5> ~ g4",
 };
 
+// A breakbeat in the amen idiom: kick off the grid, snares on the backbeat
+// with ghosts between them, and hats thinned at random so no bar repeats.
+static char const* const tune_break[] = {
+    "# amen style breakbeat . yellow square and green circle change tempo",
+    "bpm 174",
+    "delay 1 0.0862 0.35 0.22",
+    "",
+    "bd      x.....x....x....",
+    "sd      ....x..x..x...x.",
+    "hh:0.20 x*16?0.12",
+    "oh:0.16 .......x........",
+    "rim:0.18 ~ ~ [~ x] ~",
+    "",
+    "saw:0.30:340:0.6   c1 ~ ~ [~ c1] ~ ~ eb1 ~",
+    "square:0.05:2800   ~ ~ <g4 bb4> ~",
+};
+
+// Rolling two step bass under a moving arpeggio, the trance end of drum and
+// bass. The bass is one line: <> walks the root while * rolls it.
+static char const* const tune_liquid[] = {
+    "# trancy drum and bass",
+    "bpm 174",
+    "delay 1 0.1034 0.5 0.34",
+    "",
+    "bd      x.......x.......",
+    "sd      ....x.......x...",
+    "hh:0.18 x*16?0.1",
+    "oh:0.14 ..........x.....",
+    "",
+    "saw:0.30:380:0.62  <c1 c1 ab0 bb0>*2",
+    "saw:0.12:1700:0.4  [c4 eb4 g4 bb4]*2",
+    "square:0.05:3200   ~ <g5 bb5 c6 bb5> ~ eb5",
+    "tri:0.08:900       <c3 ab2 bb2 g2>",
+};
+
+// Sparse and wet: almost nothing playing, most of the sound is the delay.
+static char const* const tune_dub[] = {
+    "# dub . mostly delay . blue cloud panics if it gets away from you",
+    "bpm 140",
+    "delay 1 0.321 0.62 0.55",
+    "",
+    "bd      x.......x.......",
+    "sd:0.5  ............x...",
+    "hh:0.13 ~x~x~x~x~x~x~x~x",
+    "cp:0.3  ~ ~ ~ [~ x]?0.5",
+    "",
+    "saw:0.24:460:0.55  <c2 ~ g1 ~>",
+    "square:0.05:1600   ~ ~ ~ [c4 eb4]?0.4",
+};
+
+#define TUNE(v) {#v, v, (int)(sizeof(v) / sizeof((v)[0]))}
+static preset_t const presets[] = {
+    {"house", tune_house, (int)(sizeof(tune_house) / sizeof(tune_house[0]))},
+    {"break", tune_break, (int)(sizeof(tune_break) / sizeof(tune_break[0]))},
+    {"liquid", tune_liquid, (int)(sizeof(tune_liquid) / sizeof(tune_liquid[0]))},
+    {"dub", tune_dub, (int)(sizeof(tune_dub) / sizeof(tune_dub[0]))},
+};
+#define PRESET_COUNT ((int)(sizeof(presets) / sizeof(presets[0])))
+
+static int preset_idx = 0;
+static int save_slot  = 0;
+
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
 
-static void ed_load_demo(void) {
-    ed_lines = (int)(sizeof(demo) / sizeof(demo[0]));
-    if (ed_lines > ED_MAX_LINES) {
-        ed_lines = ED_MAX_LINES;
+static void ed_load_preset(int idx) {
+    if (PRESET_COUNT == 0) {
+        return;
     }
+    preset_idx     = ((idx % PRESET_COUNT) + PRESET_COUNT) % PRESET_COUNT;
+    preset_t const* t = &presets[preset_idx];
+
+    ed_lines = t->count > ED_MAX_LINES ? ED_MAX_LINES : t->count;
     for (int i = 0; i < ed_lines; i++) {
-        snprintf(ed[i], sizeof(ed[i]), "%s", demo[i]);
+        snprintf(ed[i], sizeof(ed[i]), "%s", t->lines[i]);
     }
-    cur_row = 4;
-    cur_col = 0;
+    cur_row   = 4;
+    cur_col   = 0;
+    need_full = true;
 }
 
 // Flattens the editor into one buffer for the parser.
@@ -129,6 +204,32 @@ static void ed_text(char* out, size_t len) {
         pos += (size_t)n;
     }
     out[pos < len ? pos : len - 1] = 0;
+}
+
+// Replaces the whole buffer, used when a set is loaded.
+static void ed_set_text(char const* text) {
+    ed_lines = 0;
+    while (*text && ed_lines < ED_MAX_LINES) {
+        char const* eol = strchr(text, '\n');
+        size_t      len = eol ? (size_t)(eol - text) : strlen(text);
+        if (len > ED_MAX_COLS) {
+            len = ED_MAX_COLS;
+        }
+        memcpy(ed[ed_lines], text, len);
+        ed[ed_lines][len] = 0;
+        ed_lines++;
+        if (!eol) {
+            break;
+        }
+        text = eol + 1;
+    }
+    if (ed_lines == 0) {
+        ed_lines = 1;
+        ed[0][0] = 0;
+    }
+    cur_row   = 0;
+    cur_col   = 0;
+    need_full = true;
 }
 
 static void ed_clamp(void) {
@@ -371,7 +472,7 @@ static void draw_key_glyph(int fkey, float x, float y, float s) {
 }
 
 static void draw_footer(void) {
-    static char const* const labels[6] = {"play", "eval", "bpm-", "bpm+", "panic", "demo"};
+    static char const* const labels[6] = {"play", "eval", "bpm-", "bpm+", "panic", "tune"};
 
     float bar_y = ui_h - 22.0f;
     pax_simple_rect(&fb, COL_PANEL, 0, bar_y, ui_w, 22);
@@ -385,8 +486,9 @@ static void draw_footer(void) {
         x += pax_text_size(FONT, 13, labels[i]).x + 12.0f;
     }
 
-    pax_draw_text(&fb, COL_DIM, FONT, 13, x, bar_y + 4.0f, "esc exit");
-    x += pax_text_size(FONT, 13, "esc exit").x + 12.0f;
+    char const* tail = "esc exit   ^s save  ^o open  ^1-8 slot";
+    pax_draw_text(&fb, COL_DIM, FONT, 13, x, bar_y + 4.0f, tail);
+    x += pax_text_size(FONT, 13, tail).x + 12.0f;
 
     // The status only gets drawn when it does not collide with the legend
     if (status[0]) {
@@ -519,8 +621,10 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
             dirty        = true;
             break;
         case BSP_INPUT_NAVIGATION_KEY_F6:
-            ed_load_demo();
+            ed_load_preset(preset_idx + 1);
             do_eval();
+            snprintf(status, sizeof(status), "tune: %s", presets[preset_idx].name);
+            status_error = false;
             break;
         case BSP_INPUT_NAVIGATION_KEY_VOLUME_UP:
             app_audio_set_master(app_audio_get_master() + 0.05f);
@@ -541,12 +645,69 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
     ed_clamp();
 }
 
+static void do_save(void) {
+    static char text[ED_MAX_LINES * (ED_MAX_COLS + 2)];
+    if (!app_store_available()) {
+        snprintf(status, sizeof(status), "no storage");
+        status_error = true;
+        dirty        = true;
+        return;
+    }
+    ed_text(text, sizeof(text));
+    bool ok      = app_store_save(save_slot, text);
+    status_error = !ok;
+    if (ok) {
+        snprintf(status, sizeof(status), "saved %s slot %d", app_store_where(), save_slot);
+    } else {
+        snprintf(status, sizeof(status), "could not save slot %d", save_slot);
+    }
+    dirty = true;
+}
+
+static void do_load(void) {
+    static char text[ED_MAX_LINES * (ED_MAX_COLS + 2)];
+    if (!app_store_available()) {
+        snprintf(status, sizeof(status), "no storage");
+        status_error = true;
+        dirty        = true;
+        return;
+    }
+    if (!app_store_load(save_slot, text, sizeof(text))) {
+        snprintf(status, sizeof(status), "slot %d is empty", save_slot);
+        status_error = true;
+        dirty        = true;
+        return;
+    }
+    ed_set_text(text);
+    do_eval();
+    snprintf(status, sizeof(status), "loaded slot %d", save_slot);
+    status_error = false;
+}
+
 static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
     // The BSP picks .ascii from the base and shift columns only, so a key
     // reached through AltGr reports the wrong character there while .utf8
     // carries the right one. Trust .utf8 whenever it is a single byte, and
     // drop anything multi byte since the buffer and the parser are ASCII.
     char c = kb->ascii;
+
+    // Ctrl shortcuts never reach the buffer as text
+    if (kb->modifiers & BSP_INPUT_MODIFIER_CTRL) {
+        char lower = (char)(c | 0x20);
+        if (lower == 's') {
+            do_save();
+        } else if (lower == 'o') {
+            do_load();
+        } else if (c >= '1' && c <= '8') {
+            save_slot = c - '1';
+            snprintf(status, sizeof(status), "slot %d%s", save_slot,
+                     app_store_exists(save_slot) ? " (in use)" : " (empty)");
+            status_error = false;
+            dirty        = true;
+        }
+        return;
+    }
+
     if (kb->utf8[0] != 0) {
         if ((unsigned char)kb->utf8[0] >= 0x80) {
             return;
@@ -658,7 +819,11 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(app_audio_start());
 
-    ed_load_demo();
+    // Storage is optional: without it the instrument still plays, it just
+    // cannot keep anything.
+    app_store_init();
+
+    ed_load_preset(0);
     do_eval();
     app_audio_set_playing(true);
     render();

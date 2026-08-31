@@ -36,7 +36,7 @@ at an existing checkout with a `.IDF_PATH` file or an `esp-idf` symlink.
 | F2, Ctrl+Enter | evaluate the buffer |
 | F3 / F4 | tempo down / up |
 | F5 | panic, stop everything |
-| F6 | reload the demo |
+| F6 | next starter tune |
 | Volume up/down | master gain |
 | ESC | back to the launcher (Tanmatsu has no F7-F12) |
 
@@ -93,12 +93,44 @@ parts on orbit 1, which carries the delay by default.
 A line that fails to parse is reported in the footer and skipped; the rest of
 the program keeps playing.
 
+## Starter tunes
+
+F6 cycles four of them: `house`, `break` (a breakbeat in the amen idiom at
+174), `liquid` (rolling two step drum and bass) and `dub` (sparse, mostly
+delay). They are ordinary editor buffers, so every one of them is something you
+could have typed, and every one can be pulled apart while it plays.
+
+## Saving sets
+
+| Key | Action |
+|---|---|
+| Ctrl+S | save to the current slot |
+| Ctrl+O | load the current slot |
+| Ctrl+1 to Ctrl+8 | choose a slot |
+
+Sets are plain text in `live/setN.txt`. They go to the internal FAT partition,
+because a clean Tanmatsu has nothing else and sets should be where you left
+them; a microSD card is used when the internal partition is unavailable. Both
+mounts refuse to reformat on failure, since that partition also holds the
+launcher's record of every installed app.
+
+Because they are plain text they can be pushed and pulled with badgelink:
+
+```
+cd badgelink/tools
+./badgelink.sh fs download /int/live/set0.txt set0.txt
+```
+
+USB mass storage is a third possible home, but it needs USB host mode, which
+conflicts with badge link, so it is not wired up.
+
 ## Layout
 
 ```
 components/strudel_core/  pattern algebra and mini notation, no ESP-IDF
 components/strudel_dsp/   voice engine, no ESP-IDF
 main/app_audio.c          line parser, scheduler, I2S task
+main/app_store.c          saving and loading sets
 main/main.c               editor and drawing
 test/host/                gcc build of the portable parts
 ```
@@ -109,6 +141,7 @@ checks it for NaNs, clipping and silence, without touching hardware.
 ## Next
 
 - Sample playback from the SD card
+- USB mass storage for sets
 - Reverb, per part pan and swing
 - Per step control patterns, so gain and cutoff can be sequenced too
 - Save and load sets

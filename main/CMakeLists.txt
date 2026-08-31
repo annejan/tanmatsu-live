@@ -2,10 +2,14 @@ idf_component_register(
 	SRCS
 		"main.c"
 		"app_audio.c"
+		"app_store.c"
 	PRIV_REQUIRES
 		esp_lcd
 		esp_timer
 		nvs_flash
+		fatfs
+		esp_driver_sdmmc
+		sdmmc
 		driver
 		badge-bsp
 		strudel_dsp
