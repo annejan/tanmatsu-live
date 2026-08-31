@@ -188,11 +188,26 @@ checks it for NaNs, clipping and silence, without touching hardware.
 
 ## Next
 
-- Sample playback from the SD card
-- USB mass storage for sets
-- Reverb, per part pan and swing
-- Per step control patterns, so gain and cutoff can be sequenced too
-- Save and load sets
+Nothing here has run on hardware since the pattern engine landed, so the first
+job is a session with the badge rather than any of the below.
+
+**Accepted but inert.** `rm=` and `dl=` set a field the synth never reads,
+because the sends are per orbit rather than per voice, and `sp=` only does
+anything once a sample is playing. They should either work or be refused.
+
+**Silent drops.** A query is capped at 48 events and a block at 64. Something
+like `hh x*64` exceeds that and loses notes with no indication; the overflow
+flag exists and nothing reads it.
+
+**Sample playback.** The voice engine already has the sampler path, including
+interpolation and speed, and nothing feeds it. Needs a WAV loader and a bank on
+the card. This is the largest sonic upgrade left.
+
+**Signals.** A control that sweeps rather than steps, `c=saw:400:3000`, needs
+continuous patterns, which the engine models but does not yet produce.
+
+**Smaller things.** Solo to go with mute, tap tempo, USB mass storage for sets,
+partial blits now that the window contract is documented.
 
 ## License
 
