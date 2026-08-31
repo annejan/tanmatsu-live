@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  host-tests:
+    # The pattern engine and the voice engine have no ESP-IDF dependency on
+    # purpose, so the parts most likely to be wrong are testable without a
+    # badge plugged in.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run host tests
+        run: make -C test/host check
+
+      - name: Render a demo beat
+        run: |
+          cd test/host
+          ls -la beat.wav
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beat
+          path: test/host/beat.wav
+          if-no-files-found: error
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Voice engine throughput
+        run: make -C test/host bench
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          clang-format --version
+          find main components -name '*.c' -o -name '*.h' \
+            | xargs clang-format --dry-run --Werror

@@ -6,7 +6,7 @@ INC     := -I../../components/strudel_dsp/include -I../../components/strudel_cor
 SRC     := $(wildcard ../../components/strudel_dsp/*.c) $(wildcard ../../components/strudel_core/*.c)
 LDLIBS  := -lm
 
-TESTS := test_synth
+TESTS := test_synth test_pattern test_mini
 
 all: $(TESTS)
 
@@ -18,6 +18,12 @@ bench: bench.c $(SRC)
 	$(CC) -O2 -g -Wall $(INC) -o bench_o2 $^ $(LDLIBS)
 	@echo "== -Og (what the badge builds today)"; ./bench_og
 	@echo "== -O2"; ./bench_o2
+
+test_pattern: test_pattern.c $(SRC)
+	$(CC) $(CFLAGS) $(INC) -o $@ $^ $(LDLIBS)
+
+test_mini: test_mini.c $(SRC)
+	$(CC) $(CFLAGS) $(INC) -o $@ $^ $(LDLIBS)
 
 check: $(TESTS)
 	@for t in $(TESTS); do echo "== $$t"; ./$$t || exit 1; done
