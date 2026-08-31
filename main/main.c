@@ -178,6 +178,13 @@ static preset_t const presets[] = {
 static int preset_idx = 0;
 static int save_slot  = 0;
 
+// A picker over the built in tunes and the saved slots, so loading something
+// means reading its name rather than remembering a number.
+#define BROWSER_ENTRIES (PRESET_COUNT + APP_STORE_SLOTS)
+static bool browser_open = false;
+static int  browser_sel  = 0;
+static char browser_label[BROWSER_ENTRIES][52];
+
 // A few whole buffer snapshots. Live coding is mostly small edits to something
 // that is already playing, so being able to step back is worth the memory.
 #define UNDO_DEPTH 8
@@ -575,6 +582,30 @@ static void draw_footer(void) {
     }
 }
 
+static void draw_browser(void) {
+    float w = 360.0f;
+    float h = (float)BROWSER_ENTRIES * 20.0f + 42.0f;
+    float x = (ui_w - w) * 0.5f;
+    float y = (ui_h - h) * 0.5f;
+
+    pax_simple_rect(&fb, COL_BG, x - 2, y - 2, w + 4, h + 4);
+    pax_simple_rect(&fb, COL_PANEL, x, y, w, h);
+    pax_simple_rect(&fb, COL_ACCENT, x, y, w, 2);
+    pax_draw_text(&fb, COL_ACCENT, FONT, 14, x + 10, y + 8, "load");
+    pax_draw_text(&fb, COL_DIM, FONT, 12, x + w - 128, y + 9, "enter load   esc cancel");
+
+    for (int i = 0; i < BROWSER_ENTRIES; i++) {
+        float ly = y + 30.0f + (float)i * 20.0f;
+        if (i == browser_sel) {
+            pax_simple_rect(&fb, 0xFF23303A, x + 4, ly - 2, w - 8, 19);
+            pax_simple_rect(&fb, COL_ACCENT, x + 4, ly - 2, 2, 19);
+        }
+        bool      empty = strstr(browser_label[i], "empty") != NULL;
+        pax_col_t col   = (i == browser_sel) ? COL_TEXT : (empty ? COL_DIM : COL_TEXT);
+        pax_draw_text(&fb, col, FONT, 14, x + 14, ly, browser_label[i]);
+    }
+}
+
 static void render(void) {
     if (pax_buf_get_width(&fb) == 0) {
         return;
@@ -586,7 +617,7 @@ static void render(void) {
         need_full = true;  // everything shifted, nothing can be reused
     }
 
-    if (need_full) {
+    if (need_full || browser_open) {
         pax_background(&fb, COL_BG);
         draw_editor();
         draw_footer();
@@ -600,6 +631,9 @@ static void render(void) {
     }
     draw_header();
     draw_lanes();
+    if (browser_open) {
+        draw_browser();
+    }
     dirty_row_a = dirty_row_b = -1;
     int64_t t1                = esp_timer_get_time();
     blit();
@@ -614,8 +648,50 @@ static void render(void) {
 // Input
 // ---------------------------------------------------------------------------
 
+static void do_load(void);
+
+static void browser_choose(void) {
+    browser_open = false;
+    need_full    = true;
+    if (browser_sel < PRESET_COUNT) {
+        ed_load_preset(browser_sel);
+        do_eval();
+        snprintf(status, sizeof(status), "tune: %s", presets[preset_idx].name);
+        status_error = false;
+    } else {
+        save_slot = browser_sel - PRESET_COUNT;
+        do_load();
+    }
+}
+
+// While the picker is up it owns the keyboard
+static bool browser_key(bsp_input_navigation_key_t key) {
+    switch (key) {
+        case BSP_INPUT_NAVIGATION_KEY_UP:
+            browser_sel = (browser_sel + BROWSER_ENTRIES - 1) % BROWSER_ENTRIES;
+            break;
+        case BSP_INPUT_NAVIGATION_KEY_DOWN:
+            browser_sel = (browser_sel + 1) % BROWSER_ENTRIES;
+            break;
+        case BSP_INPUT_NAVIGATION_KEY_RETURN:
+            browser_choose();
+            break;
+        case BSP_INPUT_NAVIGATION_KEY_ESC:
+            browser_open = false;
+            need_full    = true;
+            break;
+        default:
+            return false;
+    }
+    dirty = true;
+    return true;
+}
+
 static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
     if (!nav->state) {
+        return;
+    }
+    if (browser_open && browser_key(nav->key)) {
         return;
     }
     bool ctrl = (nav->modifiers & BSP_INPUT_MODIFIER_CTRL) != 0;
@@ -801,6 +877,21 @@ static void kill_line(void) {
     need_full = true;
 }
 
+static void browser_refresh(void) {
+    for (int i = 0; i < PRESET_COUNT; i++) {
+        snprintf(browser_label[i], sizeof(browser_label[i]), "tune  %s", presets[i].name);
+    }
+    for (int sl = 0; sl < APP_STORE_SLOTS; sl++) {
+        char label[32] = "";
+        int   idx       = PRESET_COUNT + sl;
+        if (app_store_label(sl, label, sizeof(label))) {
+            snprintf(browser_label[idx], sizeof(browser_label[idx]), "slot %d  %s", sl + 1, label);
+        } else {
+            snprintf(browser_label[idx], sizeof(browser_label[idx]), "slot %d  empty", sl + 1);
+        }
+    }
+}
+
 static void do_save(void) {
     static char text[ED_MAX_LINES * (ED_MAX_COLS + 2)];
     if (!app_store_available()) {
@@ -853,7 +944,11 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
         if (lower == 's') {
             do_save();
         } else if (lower == 'o') {
-            do_load();
+            browser_refresh();
+            browser_sel  = preset_idx;
+            browser_open = true;
+            need_full    = true;
+            dirty        = true;
         } else if (lower == 'd') {
             duplicate_line();
             dirty = true;

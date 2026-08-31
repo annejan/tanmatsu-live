@@ -23,3 +23,6 @@ char const* app_store_where(void);
 bool app_store_save(int slot, char const* text);
 bool app_store_load(int slot, char* out, size_t len);
 bool app_store_exists(int slot);
+// First line of a saved set, so a browser can show what a slot holds rather
+// than just its number. Returns false when the slot is empty.
+bool app_store_label(int slot, char* out, size_t len);

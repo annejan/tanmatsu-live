@@ -153,6 +153,37 @@ bool app_store_load(int slot, char* out, size_t len) {
     return n > 0;
 }
 
+bool app_store_label(int slot, char* out, size_t len) {
+    if (!mounted || slot < 0 || slot >= APP_STORE_SLOTS || !out || len == 0) {
+        return false;
+    }
+    char path[64];
+    slot_path(slot, path, sizeof(path));
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+    char   line[96];
+    size_t n = fread(line, 1, sizeof(line) - 1, f);
+    fclose(f);
+    line[n] = 0;
+
+    char* nl = strchr(line, '\n');
+    if (nl) {
+        *nl = 0;
+    }
+    // The first line is usually the set's own comment, which makes a good name
+    char* p = line;
+    while (*p == '#' || *p == ' ') {
+        p++;
+    }
+    if (*p == 0) {
+        p = line;
+    }
+    snprintf(out, len, "%s", p);
+    return n > 0;
+}
+
 bool app_store_exists(int slot) {
     if (!mounted || slot < 0 || slot >= APP_STORE_SLOTS) {
         return false;
