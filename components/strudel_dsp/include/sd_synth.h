@@ -48,12 +48,20 @@ typedef struct {
     float     resonance;                        // 0..1, maps to Q 0.5..12
     float     shape;                            // 0..1 waveshaper drive
     int       orbit;                            // which effect bus, 0..SD_ORBITS-1
+    // How much of this voice goes to the delay and to the reverb. Negative
+    // means take the orbit's own send level, which is the usual case.
+    float     delay_send;
+    float     room_send;
 
     // Sample playback. When smp is non-NULL it replaces the oscillator.
     int16_t const* smp;
     uint32_t       smp_len;    // frames (mono)
     float          smp_speed;  // 1.0 = original pitch
 } sd_note_t;
+
+// A note with the sends set to inherit and nothing else assumed. Zeroing a
+// sd_note_t yourself would silently mean "send this voice nowhere".
+sd_note_t sd_note_default(void);
 
 typedef struct sd_synth sd_synth_t;
 

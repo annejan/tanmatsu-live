@@ -39,6 +39,11 @@ int     app_audio_get_voices(void);
 // Fraction of the audio budget used by the last render, 0..1 and up.
 float   app_audio_get_load(void);
 
+// Number of events the last block could not fit. A pattern like "hh x\*64"
+// produces more than the query or the block can hold, and dropping them
+// silently would look like the engine simply losing notes.
+int app_audio_dropped(void);
+
 // Parse status of the last app_audio_eval. Empty string means no error.
 char const* app_audio_get_error(void);
 // Number of lines the last app_audio_eval turned into playing parts.

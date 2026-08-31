@@ -67,6 +67,7 @@ typedef struct {
     bool  use_filter;
 
     float    gain, pan_l, pan_r, shape;
+    float    delay_send, room_send;
     int      orbit;
     uint32_t rng;
 } voice_t;
@@ -108,7 +109,10 @@ struct sd_synth {
     uint32_t    age_counter;
     delay_t     delay[SD_ORBITS];
     reverb_t    reverb;
-    float*      orbit_mix;  // scratch, stereo interleaved, one block
+    float*      orbit_mix;
+    // Send buses, so a single voice can be wetter than the rest of its orbit
+    float*      delay_send;
+    float*      room_send;  // scratch, stereo interleaved, one block
     uint32_t    orbit_mix_frames;
     float       master;
     uint32_t    rng;
@@ -466,6 +470,12 @@ void sd_synth_destroy(sd_synth_t* s) {
     if (s->orbit_mix) {
         release(s->orbit_mix);
     }
+    if (s->delay_send) {
+        release(s->delay_send);
+    }
+    if (s->room_send) {
+        release(s->room_send);
+    }
     release(s);
 }
 
@@ -558,6 +568,16 @@ static voice_t* pick_voice(sd_synth_t* s) {
     return best;
 }
 
+sd_note_t sd_note_default(void) {
+    sd_note_t n   = {0};
+    n.gain        = 0.8f;
+    n.pan         = 0.5f;
+    n.delay_send  = -1.0f;  // inherit the orbit
+    n.room_send   = -1.0f;
+    n.smp_speed   = 1.0f;
+    return n;
+}
+
 void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
     voice_t* v = pick_voice(s);
     if (!v) {
@@ -597,7 +617,9 @@ void sd_synth_note_on(sd_synth_t* s, sd_note_t const* n) {
     // Constant power pan, so a centred voice is not louder than a hard panned one
     v->pan_l = cosf(pan * 0.5f * (float)M_PI);
     v->pan_r = sinf(pan * 0.5f * (float)M_PI);
-    v->orbit = (n->orbit >= 0 && n->orbit < SD_ORBITS) ? n->orbit : 0;
+    v->orbit      = (n->orbit >= 0 && n->orbit < SD_ORBITS) ? n->orbit : 0;
+    v->delay_send = n->delay_send >= 0.0f ? n->delay_send : s->delay[v->orbit].mix;
+    v->room_send  = n->room_send >= 0.0f ? n->room_send : s->delay[v->orbit].room_send;
 
     v->sustain   = n->sustain > 0.0f ? n->sustain : (v->drum ? 0.0f : 0.7f);
     v->atk_rate  = rate_from_time(n->attack, s->inv_sr);
@@ -727,20 +749,31 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
             s->release(s->orbit_mix);
         }
         s->orbit_mix = s->alloc((size_t)frames * 2 * SD_ORBITS * sizeof(float), true);
-        if (!s->orbit_mix) {
+        if (s->delay_send) {
+            s->release(s->delay_send);
+        }
+        s->delay_send = s->alloc((size_t)frames * 2 * SD_ORBITS * sizeof(float), true);
+        if (s->room_send) {
+            s->release(s->room_send);
+        }
+        s->room_send = s->alloc((size_t)frames * sizeof(float), true);
+        if (!s->orbit_mix || !s->delay_send || !s->room_send) {
             s->orbit_mix_frames = 0;
             return;
         }
         s->orbit_mix_frames = frames;
     }
     memset(s->orbit_mix, 0, (size_t)frames * 2 * SD_ORBITS * sizeof(float));
+    memset(s->delay_send, 0, (size_t)frames * 2 * SD_ORBITS * sizeof(float));
+    memset(s->room_send, 0, (size_t)frames * sizeof(float));
 
     for (int vi = 0; vi < SD_MAX_VOICES; vi++) {
         voice_t* v = &s->v[vi];
         if (!v->active) {
             continue;
         }
-        float* bus = s->orbit_mix + (size_t)v->orbit * frames * 2;
+        float* bus  = s->orbit_mix + (size_t)v->orbit * frames * 2;
+        float* dsnd = s->delay_send + (size_t)v->orbit * frames * 2;
         for (uint32_t i = 0; i < frames && v->active; i++) {
             float raw;
             if (v->drum != SD_DRUM_NONE) {
@@ -767,16 +800,26 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
                 raw = shaper(raw, v->shape);
             }
 
-            float amp       = env_step(v, s->inv_sr) * v->gain;
-            bus[i * 2]     += raw * amp * v->pan_l;
-            bus[i * 2 + 1] += raw * amp * v->pan_r;
+            float amp = env_step(v, s->inv_sr) * v->gain;
+            float l   = raw * amp * v->pan_l;
+            float r   = raw * amp * v->pan_r;
+            bus[i * 2] += l;
+            bus[i * 2 + 1] += r;
+            if (v->delay_send > 0.0f) {
+                dsnd[i * 2] += l * v->delay_send;
+                dsnd[i * 2 + 1] += r * v->delay_send;
+            }
+            if (v->room_send > 0.0f) {
+                s->room_send[i] += (l + r) * 0.5f * v->room_send;
+            }
         }
     }
 
     for (int o = 0; o < SD_ORBITS; o++) {
         float*   bus = s->orbit_mix + (size_t)o * frames * 2;
         delay_t* d   = &s->delay[o];
-        if (d->mix > 0.0f && d->buf) {
+        float const* dsnd = s->delay_send + (size_t)o * frames * 2;
+        if (d->buf) {
             uint32_t dsamp = (uint32_t)(d->time_s * (float)s->sr);
             if (dsamp < 1) {
                 dsamp = 1;
@@ -788,11 +831,14 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
                 uint32_t rpos            = (d->wpos + d->len - dsamp) % d->len;
                 float    dl              = d->buf[rpos * 2];
                 float    dr              = d->buf[rpos * 2 + 1];
-                d->buf[d->wpos * 2]      = bus[i * 2] + dl * d->feedback;
-                d->buf[d->wpos * 2 + 1]  = bus[i * 2 + 1] + dr * d->feedback;
-                d->wpos                  = (d->wpos + 1) % d->len;
-                bus[i * 2]              += dl * d->mix;
-                bus[i * 2 + 1]          += dr * d->mix;
+                // The tank is fed by the send bus, so a voice can be wetter
+                // than the rest of its orbit. The return is at unity because
+                // the send level already decided how loud it is.
+                d->buf[d->wpos * 2]     = dsnd[i * 2] + dl * d->feedback;
+                d->buf[d->wpos * 2 + 1] = dsnd[i * 2 + 1] + dr * d->feedback;
+                d->wpos                 = (d->wpos + 1) % d->len;
+                bus[i * 2] += dl;
+                bus[i * 2 + 1] += dr;
             }
         }
         for (uint32_t i = 0; i < frames * 2; i++) {
@@ -803,15 +849,7 @@ void SD_HOT sd_synth_render(sd_synth_t* s, float* out_lr, uint32_t frames) {
     reverb_t* rv = &s->reverb;
     if (rv->ready && rv->mix > 0.0f) {
         for (uint32_t i = 0; i < frames; i++) {
-            float send = 0.0f;
-            for (int o = 0; o < SD_ORBITS; o++) {
-                if (s->delay[o].room_send <= 0.0f) {
-                    continue;
-                }
-                float const* bus = s->orbit_mix + (size_t)o * frames * 2;
-                send += (bus[i * 2] + bus[i * 2 + 1]) * 0.5f * s->delay[o].room_send;
-            }
-            float wet = reverb_tick(rv, send) * rv->mix;
+            float wet = reverb_tick(rv, s->room_send[i]) * rv->mix;
             // A little decorrelation so the tail is not dead centre
             out_lr[i * 2] += wet;
             out_lr[i * 2 + 1] += wet * 0.92f;

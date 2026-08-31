@@ -74,6 +74,7 @@ static volatile float   swing    = 0.0f;
 static volatile int64_t cur_step = 0;
 static volatile int     voices   = 0;
 static volatile float   load     = 0.0f;
+static volatile int     dropped  = 0;
 
 static char parse_error[96] = "";
 
@@ -283,11 +284,18 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
 }
 
 // A 16 slot summary of one cycle, purely so the UI can draw a lane.
-static uint16_t pattern_mask(sd_pat_t* p) {
+// This asks for a whole cycle at once, unlike the audio path which only ever
+// asks for one block, so it is the query that actually runs out of room: a
+// pattern with more onsets than the buffer holds would quietly lose steps off
+// the lane. out_full says whether what came back was the whole picture.
+static uint16_t pattern_mask(sd_pat_t* p, bool* out_full) {
     uint16_t  mask = 0;
     sd_haps_t out  = {.haps = query_haps, .cap = MAX_HAPS, .n = 0};
     sd_span_t s    = {sd_int(0), sd_int(1)};
     sd_query(p, s, &out);
+    if (out_full) {
+        *out_full = !out.overflow;
+    }
     for (int i = 0; i < out.n; i++) {
         if (!sd_hap_onset(&out.haps[i])) {
             continue;
@@ -328,7 +336,11 @@ void app_audio_eval(char const* text) {
 
         seq_line_t line = {0};
         if (parse_line(buf, len, editor_line, &arenas[spare], &line, err, sizeof(err))) {
-            line.mask                                = pattern_mask(line.pat);
+            bool full  = true;
+            line.mask  = pattern_mask(line.pat, &full);
+            if (!full && !err[0]) {
+                snprintf(err, sizeof(err), "line %d: too many steps to show on the lane", editor_line + 1);
+            }
             prog_scratch.line[prog_scratch.nlines++] = line;
         }
         editor_line++;
@@ -440,7 +452,7 @@ static void trigger(seq_line_t const* ln, sd_hval_t const* v, float step_seconds
         freq *= powf(2.0f, v->f[SD_F_NOTE] / 12.0f);
     }
 
-    sd_note_t n = {0};
+    sd_note_t n = sd_note_default();
     n.drum      = ln->drum;
     n.wave      = ln->wave == SD_WAVE_COUNT ? SD_WAVE_SINE : ln->wave;
     n.freq      = freq;
@@ -448,6 +460,16 @@ static void trigger(seq_line_t const* ln, sd_hval_t const* v, float step_seconds
     n.pan       = sd_has(v, SD_F_PAN) ? v->f[SD_F_PAN] : 0.5f;
     n.orbit     = sd_has(v, SD_F_ORBIT) ? (int)v->f[SD_F_ORBIT] : ln->orbit;
     n.shape     = sd_has(v, SD_F_SHAPE) ? v->f[SD_F_SHAPE] : 0.0f;
+    n.delay_send = sd_has(v, SD_F_DELAY) ? v->f[SD_F_DELAY] : -1.0f;
+    n.room_send  = sd_has(v, SD_F_ROOM) ? v->f[SD_F_ROOM] : -1.0f;
+
+    // speed multiplies the playback rate of a sample and, for an oscillator,
+    // its pitch, so the control means the same thing either way
+    float speed = sd_has(v, SD_F_SPEED) ? v->f[SD_F_SPEED] : 1.0f;
+    if (speed > 0.0f) {
+        n.smp_speed = speed;
+        n.freq      = freq * speed;
+    }
 
     if (ln->drum == SD_DRUM_NONE) {
         float legato = sd_has(v, SD_F_LEGATO) ? v->f[SD_F_LEGATO] : 0.85f;
@@ -459,7 +481,6 @@ static void trigger(seq_line_t const* ln, sd_hval_t const* v, float step_seconds
         n.cutoff     = sd_has(v, SD_F_CUTOFF) ? v->f[SD_F_CUTOFF] : ln->cutoff;
         n.resonance  = sd_has(v, SD_F_RESONANCE) ? v->f[SD_F_RESONANCE]
                                                  : (ln->resonance > 0.0f ? ln->resonance : 0.35f);
-        n.smp_speed  = sd_has(v, SD_F_SPEED) ? v->f[SD_F_SPEED] : 1.0f;
     }
     sd_synth_note_on(synth, &n);
 }
@@ -474,9 +495,10 @@ static sd_frac_t cycle_at(int64_t pos, int bpm) {
 
 static int gather(sd_frac_t c0, sd_frac_t c1, int bpm) {
     int    nev            = 0;
+    int    lost           = 0;
     double samples_per_cy = (double)CYCLE_DEN / (double)bpm;
 
-    for (int l = 0; l < prog.nlines && nev < MAX_EVENTS; l++) {
+    for (int l = 0; l < prog.nlines; l++) {
         sd_pat_t* pat = prog.line[l].pat;
         if (!pat) {
             continue;
@@ -484,8 +506,11 @@ static int gather(sd_frac_t c0, sd_frac_t c1, int bpm) {
         sd_haps_t out = {.haps = query_haps, .cap = MAX_HAPS, .n = 0};
         sd_span_t s   = {c0, c1};
         sd_query(pat, s, &out);
+        if (out.overflow) {
+            lost++;  // the pattern produced more events than a query can hold
+        }
 
-        for (int i = 0; i < out.n && nev < MAX_EVENTS; i++) {
+        for (int i = 0; i < out.n; i++) {
             if (!sd_hap_onset(&out.haps[i])) {
                 continue;
             }
@@ -510,12 +535,21 @@ static int gather(sd_frac_t c0, sd_frac_t c1, int bpm) {
             if (off >= BLOCK) {
                 off = BLOCK - 1;
             }
+            if (nev >= MAX_EVENTS) {
+                lost++;
+                continue;
+            }
             events[nev].off  = (uint32_t)off;
             events[nev].line = (int16_t)l;
             events[nev].v    = out.haps[i].v;
             nev++;
         }
     }
+
+    if (nev >= MAX_EVENTS) {
+        lost++;  // more events landed in this block than it can start
+    }
+    dropped = lost;
 
     // Small n, and almost always nearly sorted already
     for (int i = 1; i < nev; i++) {
@@ -696,6 +730,10 @@ float app_audio_get_load(void) {
 char const* app_audio_get_error(void) {
     return parse_error;
 }
+int app_audio_dropped(void) {
+    return dropped;
+}
+
 int app_audio_get_part_count(void) {
     return prog.nlines;
 }

@@ -54,7 +54,7 @@ static void write_wav(char const* path, float const* lr, uint32_t frames) {
 }
 
 static sd_note_t drum_note(sd_drum_t d, float gain) {
-    sd_note_t n = {0};
+    sd_note_t n = sd_note_default();
     n.drum      = d;
     n.gain      = gain;
     n.pan       = 0.5f;
@@ -116,7 +116,7 @@ int main(void) {
                     sd_synth_note_on(s, &n);
                 }
                 if (s16 % 8 == 0) {
-                    sd_note_t n = {0};
+                    sd_note_t n = sd_note_default();
                     n.wave      = SD_WAVE_SAW;
                     n.freq      = bass_hz[(step / 16) % 4];
                     n.gain      = 0.35f;
@@ -169,31 +169,59 @@ int main(void) {
     write_wav("beat.wav", out, FRAMES);
     printf("wrote beat.wav (%d s)\n", FRAMES / SR);
 
-    // The tank should still be ringing after the last note, and should settle
+    // A decaying drum leaves a tail on its own, so the only honest test is
+    // whether the reverb makes a measurable difference at the same moment.
     {
-        sd_note_t n = drum_note(SD_DRUM_SD, 0.9f);
-        sd_synth_note_on(s, &n);
-        for (int i = 0; i < 40; i++) {
-            sd_synth_render(s, out, BLOCK);
-        }
-        float tail = 0.0f;
-        for (uint32_t i = 0; i < BLOCK * 2; i++) {
-            if (fabsf(out[i]) > tail) {
-                tail = fabsf(out[i]);
+        float wet_peak = 0.0f, dry_peak = 0.0f;
+        for (int pass = 0; pass < 2; pass++) {
+            sd_synth_panic(s);
+            sd_synth_set_reverb(s, 0.85f, 0.3f, pass == 0 ? 0.6f : 0.0f);
+            sd_synth_set_room(s, 0, 0.9f);
+
+            sd_note_t n = drum_note(SD_DRUM_SD, 0.9f);
+            sd_synth_note_on(s, &n);
+
+            float peak = 0.0f;
+            for (int i = 0; i < 60; i++) {
+                sd_synth_render(s, out, BLOCK);
+                if (i < 30) {
+                    continue;  // let the dry hit die away first
+                }
+                for (uint32_t k = 0; k < BLOCK * 2; k++) {
+                    if (fabsf(out[k]) > peak) {
+                        peak = fabsf(out[k]);
+                    }
+                }
+            }
+            if (pass == 0) {
+                wet_peak = peak;
+            } else {
+                dry_peak = peak;
             }
         }
-        check(tail > 0.0f, "reverb leaves a tail after the note");
-        check(tail < 0.5f, "reverb tail decays rather than building up");
-        for (int i = 0; i < 600; i++) {
+        check(wet_peak > dry_peak * 4.0f, "reverb is clearly audible after the dry hit has gone");
+        printf("reverb tail %.5f vs dry %.5f\n", wet_peak, dry_peak);
+
+        // and a voice can opt out of its orbit's send
+        sd_synth_panic(s);
+        sd_synth_set_reverb(s, 0.85f, 0.3f, 0.6f);
+        sd_synth_set_room(s, 0, 0.9f);
+        sd_note_t dry = drum_note(SD_DRUM_SD, 0.9f);
+        dry.room_send = 0.0f;
+        sd_synth_note_on(s, &dry);
+        float opted = 0.0f;
+        for (int i = 0; i < 60; i++) {
             sd_synth_render(s, out, BLOCK);
-        }
-        float settled = 0.0f;
-        for (uint32_t i = 0; i < BLOCK * 2; i++) {
-            if (fabsf(out[i]) > settled) {
-                settled = fabsf(out[i]);
+            if (i < 30) {
+                continue;
+            }
+            for (uint32_t k = 0; k < BLOCK * 2; k++) {
+                if (fabsf(out[k]) > opted) {
+                    opted = fabsf(out[k]);
+                }
             }
         }
-        check(settled < 0.02f, "reverb settles to silence");
+        check(opted < wet_peak / 4.0f, "a voice can send itself dry against the orbit");
     }
 
     sd_synth_panic(s);

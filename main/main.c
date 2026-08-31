@@ -461,6 +461,9 @@ static void draw_header(void) {
     if (app_audio_pending()) {
         pax_draw_text(&fb, COL_PLAYHEAD, FONT, FONT_SIZE, 118, 5, "QUEUED");
     }
+    if (app_audio_dropped() > 0) {
+        pax_draw_text(&fb, COL_WARN, FONT, FONT_SIZE, 200, 5, "DROPPING NOTES");
+    }
     pax_vec2f size = pax_text_size(FONT, FONT_SIZE, info);
     pax_draw_text(&fb, app_audio_is_playing() ? COL_TEXT : COL_DIM, FONT, FONT_SIZE, ui_w - size.x - 6, 5, info);
 }
