@@ -1,0 +1,306 @@
+dependencies:
+  badgeteam/badge-bsp:
+    component_hash: 864bd0250dab247401845c8d8039c28697606c21f529a3dd3b982ed31eee0f4c
+    dependencies:
+    - name: badgeteam/mch2022-rp2040
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32
+      version: =0.0.2
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/esp_lcd_ili9341
+      registry_url: https://components.espressif.com
+      require: private
+      version: =2.0.2
+    - name: espressif/esp_lcd_touch_gt911
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.2.0~3
+    - name: espressif/led_strip
+      registry_url: https://components.espressif.com
+      require: private
+      version: =3.0.3
+    - name: idf
+      require: private
+      version: '>=6.0.2'
+    - name: nicolaielectronics/bmi270
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.0.1
+    - name: nicolaielectronics/es8156
+      registry_url: https://components.espressif.com
+      require: private
+      version: =0.0.3
+    - name: nicolaielectronics/mipi_dsi_abstraction
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: =1.0.0
+    - name: nicolaielectronics/mpr121
+      registry_url: https://components.espressif.com
+      require: private
+      version: =0.0.2
+    - name: nicolaielectronics/ssd1619
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.0.0
+    - name: nicolaielectronics/tanmatsu_coprocessor
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: target == esp32p4
+      version: =0.8.0
+    - name: nicolaielectronics/tca8418
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.0.0
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32p4
+    - esp32c6
+    - esp32c3
+    - esp32s3
+    version: 1.1.0
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
+  espressif/esp_lcd_ek79007:
+    component_hash: c5a0501fbab972031026aa6144354b31ed6db899cf2ee5a22ca4ebaf3fea1657
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 2.0.2~1
+  espressif/esp_lcd_ili9341:
+    component_hash: 0baab584e0e490511d6bdbae6aa045130424d732ecdaad6cd1d3bd3c0abe2c30
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 2.0.2
+  espressif/esp_lcd_ili9881c:
+    component_hash: 0288df12755c95d406ccea245a427595f314df0b14a61846286d926ea6f3698e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 1.1.0
+  espressif/esp_lcd_lt8912b:
+    component_hash: f954a3393c8e16159f0c7448c9f4312b58933a53563fe5173db5f63a2b0f7aa7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.2.0
+  espressif/esp_lcd_st7701:
+    component_hash: 924f346e36da39aaa38177e21bd360b5442abc792338fb64ad1e644481255898
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32s3
+    - esp32s31
+    - esp32p4
+    version: 2.0.2~2
+  espressif/esp_lcd_touch:
+    component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.2.1
+  espressif/esp_lcd_touch_gt911:
+    component_hash: 07f678e4202d79bbad917805dcec4134ff08344177720f32ec4898267ad9e394
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.2.0
+    - name: idf
+      require: private
+      version: '>=5.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.2.0~3
+  espressif/led_strip:
+    component_hash: 28621486f77229aaf81c71f5e15d6fbf36c2949cf11094e07090593e659e7639
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 3.0.3
+  idf:
+    source:
+      type: idf
+    version: 6.0.2
+  nicolaielectronics/bmi270:
+    component_hash: 4eba2761d6fc2ea032c3e5321e594680f0a47a53ae76323a129628e16af38a0c
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.1
+  nicolaielectronics/es8156:
+    component_hash: 2cf4431df1d0b0867cd1eefa0a1fbc77dcf5347e9aa81446c95d5e3175c9bd63
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.0.3
+  nicolaielectronics/mipi_dsi_abstraction:
+    component_hash: 1c68f7a024f5fcbbacc84a1105f9bc01c390f86bb74c49a93c2aa0defd326378
+    dependencies:
+    - name: espressif/esp_lcd_ek79007
+      registry_url: https://components.espressif.com
+      require: private
+      version: =2.0.2~1
+    - name: espressif/esp_lcd_ili9881c
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.1.0
+    - name: espressif/esp_lcd_lt8912b
+      registry_url: https://components.espressif.com
+      require: private
+      version: =0.2.0
+    - name: espressif/esp_lcd_st7701
+      registry_url: https://components.espressif.com
+      require: private
+      version: =2.0.2~2
+    - name: idf
+      require: private
+      version: '>=6.0.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 1.0.0
+  nicolaielectronics/mpr121:
+    component_hash: 93853032af10158cbb8714c9f487b1afec9f182b3826d95906d79704858f5b1b
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.0.2
+  nicolaielectronics/ssd1619:
+    component_hash: d0bc0dd259e8ada2511f0dbf9f5a861cd2e81bdd0f0eb041ad647932cdc73650
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=6.0.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.0
+  nicolaielectronics/tanmatsu_coprocessor:
+    component_hash: 6942f39750ce5d30415bfa25eb4d544fb54f4c189d38a5e505fd256ea5a9d55b
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    targets:
+    - esp32p4
+    version: 0.8.0
+  nicolaielectronics/tca8418:
+    component_hash: 7e5f11abb243f0341967d85219a2a85fa86f0a6fa6024ddd59f1f5ebb1e0a5d4
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.4'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.0
+  robotman2412/pax-gfx:
+    component_hash: afbc37df639e142eb1de9b18b1581c0f4d71f0892e3f291d2843b018b3559211
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.2.2
+direct_dependencies:
+- badgeteam/badge-bsp
+- idf
+- robotman2412/pax-gfx
+manifest_hash: 949c47be237df18dbb2489aa2a57c696af02f5fce859c919d433ff6e04f487ab
+target: esp32p4
+version: 3.0.0

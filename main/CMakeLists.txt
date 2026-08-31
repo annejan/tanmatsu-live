@@ -1,0 +1,14 @@
+idf_component_register(
+	SRCS
+		"main.c"
+		"app_audio.c"
+	PRIV_REQUIRES
+		esp_lcd
+		esp_timer
+		nvs_flash
+		driver
+		badge-bsp
+		strudel_dsp
+	INCLUDE_DIRS
+		"."
+)

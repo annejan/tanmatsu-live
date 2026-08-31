@@ -1,0 +1,9 @@
+build/
+esp-idf
+managed_components/
+sdkconfig_*
+test/host/test_synth
+test/host/*.wav
+badgelink/
+test/host/bench_og
+test/host/bench_o2
