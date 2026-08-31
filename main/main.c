@@ -173,6 +173,14 @@ static preset_t const presets[] = {
 static int preset_idx = 0;
 static int save_slot  = 0;
 
+// A few whole buffer snapshots. Live coding is mostly small edits to something
+// that is already playing, so being able to step back is worth the memory.
+#define UNDO_DEPTH 8
+static char undo_buf[UNDO_DEPTH][ED_MAX_LINES][ED_MAX_COLS + 1];
+static int  undo_lines[UNDO_DEPTH];
+static int  undo_head  = 0;  // next slot to write
+static int  undo_count = 0;
+
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
@@ -204,6 +212,27 @@ static void ed_text(char* out, size_t len) {
         pos += (size_t)n;
     }
     out[pos < len ? pos : len - 1] = 0;
+}
+
+static void undo_push(void) {
+    memcpy(undo_buf[undo_head], ed, sizeof(ed));
+    undo_lines[undo_head] = ed_lines;
+    undo_head             = (undo_head + 1) % UNDO_DEPTH;
+    if (undo_count < UNDO_DEPTH) {
+        undo_count++;
+    }
+}
+
+static bool undo_pop(void) {
+    if (undo_count == 0) {
+        return false;
+    }
+    undo_head = (undo_head + UNDO_DEPTH - 1) % UNDO_DEPTH;
+    undo_count--;
+    memcpy(ed, undo_buf[undo_head], sizeof(ed));
+    ed_lines  = undo_lines[undo_head];
+    need_full = true;
+    return true;
 }
 
 // Replaces the whole buffer, used when a set is loaded.
@@ -301,6 +330,7 @@ static void ed_newline(void) {
     if (ed_lines >= ED_MAX_LINES) {
         return;
     }
+    undo_push();
     for (int i = ed_lines; i > cur_row + 1; i--) {
         memcpy(ed[i], ed[i - 1], sizeof(ed[i]));
     }
@@ -486,7 +516,7 @@ static void draw_footer(void) {
         x += pax_text_size(FONT, 13, labels[i]).x + 12.0f;
     }
 
-    char const* tail = "esc exit   ^s save  ^o open  ^1-8 slot";
+    char const* tail = "esc exit  ^m mute  ^d dup  ^k kill  ^z undo  ^s save  ^o open";
     pax_draw_text(&fb, COL_DIM, FONT, 13, x, bar_y + 4.0f, tail);
     x += pax_text_size(FONT, 13, tail).x + 12.0f;
 
@@ -645,6 +675,67 @@ static void handle_navigation(bsp_input_event_args_navigation_t const* nav) {
     ed_clamp();
 }
 
+// Commenting a line is how you mute a part without losing it, which during a
+// set matters more than any other edit.
+static void toggle_comment(void) {
+    undo_push();
+    char* line = ed[cur_row];
+    if (line[0] == '#') {
+        size_t n = strlen(line);
+        size_t k = 1;
+        while (k < n && line[k] == ' ') {
+            k++;
+        }
+        memmove(line, line + k, n - k + 1);
+        if (cur_col >= (int)k) {
+            cur_col -= (int)k;
+        }
+    } else {
+        size_t n = strlen(line);
+        if (n + 2 > ED_MAX_COLS) {
+            return;
+        }
+        memmove(line + 2, line, n + 1);
+        line[0] = '#';
+        line[1] = ' ';
+        cur_col += 2;
+    }
+    need_full = true;
+}
+
+static void duplicate_line(void) {
+    if (ed_lines >= ED_MAX_LINES) {
+        return;
+    }
+    undo_push();
+    for (int i = ed_lines; i > cur_row + 1; i--) {
+        memcpy(ed[i], ed[i - 1], sizeof(ed[i]));
+    }
+    memcpy(ed[cur_row + 1], ed[cur_row], sizeof(ed[cur_row]));
+    ed_lines++;
+    cur_row++;
+    need_full = true;
+}
+
+static void kill_line(void) {
+    undo_push();
+    if (ed_lines <= 1) {
+        ed[0][0] = 0;
+        cur_col  = 0;
+        need_full = true;
+        return;
+    }
+    for (int i = cur_row; i < ed_lines - 1; i++) {
+        memcpy(ed[i], ed[i + 1], sizeof(ed[i]));
+    }
+    ed_lines--;
+    if (cur_row >= ed_lines) {
+        cur_row = ed_lines - 1;
+    }
+    cur_col   = 0;
+    need_full = true;
+}
+
 static void do_save(void) {
     static char text[ED_MAX_LINES * (ED_MAX_COLS + 2)];
     if (!app_store_available()) {
@@ -698,6 +789,23 @@ static void handle_keyboard(bsp_input_event_args_keyboard_t const* kb) {
             do_save();
         } else if (lower == 'o') {
             do_load();
+        } else if (lower == 'd') {
+            duplicate_line();
+            dirty = true;
+        } else if (lower == 'k') {
+            kill_line();
+            do_eval();
+        } else if (lower == 'z') {
+            if (undo_pop()) {
+                ed_clamp();
+                do_eval();
+                snprintf(status, sizeof(status), "undo");
+                status_error = false;
+            }
+            dirty = true;
+        } else if (c == '/' || lower == 'm') {
+            toggle_comment();
+            do_eval();
         } else if (c >= '1' && c <= '8') {
             save_slot = c - '1';
             snprintf(status, sizeof(status), "slot %d%s", save_slot,
