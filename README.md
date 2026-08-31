@@ -86,9 +86,35 @@ The older step grid still works and is often clearer for drums: a pattern of
 only `x X . ~ - _ 0-9` with no spaces, such as `bd x...x...x...x...`, is read as
 a grid and turned into the same pattern a sequence would make.
 
-**Directives**: `bpm <n>`, `gain <0..2>`,
-`delay <orbit> <time> <feedback> <mix>`. Drums play on orbit 0 and melodic
-parts on orbit 1, which carries the delay by default.
+**Control clauses**: anything after the pattern of the form `field=pattern`
+sequences that control. The value is itself a pattern, and the structure always
+comes from the left, so the rhythm stays the pattern's and the values are
+sampled from the clause.
+
+```
+hh  x*8         g=29492949           quiet, loud, mid, loud, ...
+saw c2 eb2 g2   c=<620 1400> q=.6    the filter alternates each cycle
+bd  x*4         p=<.3 .7>            the kick moves across the stereo field
+saw c3 eb3      nt+=<0 12>           up an octave every other cycle
+hh  x*16        g*=.5                half as loud as it was
+```
+
+`field=` sets, `field+=` adds and `field*=` multiplies. Fields have short names
+so a line still fits: `g` gain, `p` pan, `c` cutoff, `q` resonance, `nt` note
+offset in semitones, `sp` speed, `lg` legato, `atk` `dec` `sus` `rel` envelope,
+`shp` shape, `ob` orbit. The full names work too.
+
+In a 0..1 control a run of digits is a per step grid where each digit is that
+many ninths, which is the same ninth the velocity grid already uses: `g=29492949`
+is eight steps. Write a decimal point when you mean a plain number: `g=.5`.
+
+The head's `name:gain:cutoff:resonance` shorthand still works and is just a
+shorter way of writing the first three clauses.
+
+**Directives**: `bpm <n>`, `gain <0..2>`, `swing <0..0.75>`,
+`delay <orbit> <time> <feedback> <mix>`, `reverb <size> <damp> <mix>`,
+`room <orbit> <send>`. Drums play on orbit 0 and melodic parts on orbit 1,
+which carries the delay by default.
 
 A line that fails to parse is reported in the footer and skipped; the rest of
 the program keeps playing.
@@ -107,6 +133,12 @@ could have typed, and every one can be pulled apart while it plays.
 | Ctrl+S | save to the current slot |
 | Ctrl+O | load the current slot |
 | Ctrl+1 to Ctrl+8 | choose a slot |
+
+Other keys worth knowing, and all of them are listed on the badge under Ctrl+H:
+Ctrl+M mutes a line, Alt and a digit mutes that part wherever the cursor is,
+Ctrl+D duplicates, Ctrl+K deletes, Ctrl+Z undoes, Alt with up or down moves a
+line, and Ctrl+Space cycles the step under the cursor. Escape has to be pressed
+twice to leave, because one stray keypress should not end a set.
 
 Sets are plain text in `live/setN.txt`. They go to the internal FAT partition,
 because a clean Tanmatsu has nothing else and sets should be where you left

@@ -6,7 +6,7 @@ INC     := -I../../components/strudel_dsp/include -I../../components/strudel_cor
 SRC     := $(wildcard ../../components/strudel_dsp/*.c) $(wildcard ../../components/strudel_core/*.c)
 LDLIBS  := -lm
 
-TESTS := test_synth test_pattern test_mini
+TESTS := test_synth test_pattern test_mini test_line
 
 all: $(TESTS)
 
@@ -23,6 +23,9 @@ test_pattern: test_pattern.c $(SRC)
 	$(CC) $(CFLAGS) $(INC) -o $@ $^ $(LDLIBS)
 
 test_mini: test_mini.c $(SRC)
+	$(CC) $(CFLAGS) $(INC) -o $@ $^ $(LDLIBS)
+
+test_line: test_line.c $(SRC)
 	$(CC) $(CFLAGS) $(INC) -o $@ $^ $(LDLIBS)
 
 check: $(TESTS)

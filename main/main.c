@@ -102,13 +102,14 @@ static char const* const tune_house[] = {
     "",
     "bd      x ~ ~ x ~ ~ x ~",
     "sd      ~ ~ x ~ ~ ~ x ~",
-    "hh:0.26 x*8?0.2",
+    "swing 0.18",
+    "hh      x*8?0.2 g=29492949",
     "oh:0.20 ~ ~ ~ ~ ~ ~ x ~",
     "cp:0.34 x(3,8,3)",
     "",
-    "saw:0.26:620:0.55   <c2 g1 c2 bb1> ~ [~ c2] ~",
-    "saw:0.11:1500:0.35  [c3 eb3 g3]*2 . <bb2 ab2>",
-    "square:0.06:2600    ~ <c5 eb5> ~ g4",
+    "saw     <c2 g1 c2 bb1> ~ [~ c2] ~   g=.26 c=<620 900 620 1400> q=.55",
+    "saw     [c3 eb3 g3]*2 . <bb2 ab2>   g=.11 c=1500 q=.35 p=<.35 .65>",
+    "square  ~ <c5 eb5> ~ g4             g=.06 c=2600 nt=<0 0 12 0>",
 };
 
 // A breakbeat in the amen idiom: kick off the grid, snares on the backbeat
@@ -120,12 +121,12 @@ static char const* const tune_break[] = {
     "",
     "bd      x.....x....x....",
     "sd      ....x..x..x...x.",
-    "hh:0.20 x*16?0.12",
+    "hh      x*16?0.12 g=2939293929392949",
     "oh:0.16 .......x........",
     "rim:0.18 ~ ~ [~ x] ~",
     "",
-    "saw:0.30:340:0.6   c1 ~ ~ [~ c1] ~ ~ eb1 ~",
-    "square:0.05:2800   ~ ~ <g4 bb4> ~",
+    "saw     c1 ~ ~ [~ c1] ~ ~ eb1 ~   g=.30 c=<340 520 340 800> q=.6",
+    "square  ~ ~ <g4 bb4> ~            g=.05 c=2800 p=<.2 .8>",
 };
 
 // Rolling two step bass under a moving arpeggio, the trance end of drum and
@@ -142,10 +143,10 @@ static char const* const tune_liquid[] = {
     "hh:0.18 x*16?0.1",
     "oh:0.14 ..........x.....",
     "",
-    "saw:0.30:380:0.62  <c1 c1 ab0 bb0>*2",
-    "saw:0.12:1700:0.4  [c4 eb4 g4 bb4]*2",
-    "square:0.05:3200   ~ <g5 bb5 c6 bb5> ~ eb5",
-    "tri:0.08:900       <c3 ab2 bb2 g2>",
+    "saw     <c1 c1 ab0 bb0>*2       g=.30 c=380 q=.62",
+    "saw     [c4 eb4 g4 bb4]*2       g=.12 c=<1200 2400> q=.4 p=<.3 .7>",
+    "square  ~ <g5 bb5 c6 bb5> ~ eb5 g=.05 c=3200",
+    "tri     <c3 ab2 bb2 g2>         g=.08 c=900 nt+=<0 12>",
 };
 
 // Sparse and wet: almost nothing playing, most of the sound is the delay.
@@ -154,6 +155,7 @@ static char const* const tune_dub[] = {
     "bpm 140",
     "delay 1 0.321 0.62 0.55",
     "reverb 0.85 0.35 0.40",
+    "swing 0.22",
     "room 0 0.25",
     "room 1 0.55",
     "",
@@ -162,8 +164,8 @@ static char const* const tune_dub[] = {
     "hh:0.13 ~x~x~x~x~x~x~x~x",
     "cp:0.3  ~ ~ ~ [~ x]?0.5",
     "",
-    "saw:0.24:460:0.55  <c2 ~ g1 ~>",
-    "square:0.05:1600   ~ ~ ~ [c4 eb4]?0.4",
+    "saw     <c2 ~ g1 ~>          g=.24 c=<460 700> q=.55 rm=.5",
+    "square  ~ ~ ~ [c4 eb4]?0.4   g=.05 c=1600 p=<.15 .85>",
 };
 
 #define TUNE(v) {#v, v, (int)(sizeof(v) / sizeof((v)[0]))}

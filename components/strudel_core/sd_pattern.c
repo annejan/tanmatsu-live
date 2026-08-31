@@ -705,15 +705,23 @@ sd_field_t sd_field_from_name(char const* name) {
             return (sd_field_t)i;
         }
     }
-    // A few aliases that are hard to do without
-    if (strcmp(name, "sound") == 0) {
-        return SD_F_S;
-    }
-    if (strcmp(name, "lpf") == 0) {
-        return SD_F_CUTOFF;
-    }
-    if (strcmp(name, "res") == 0) {
-        return SD_F_RESONANCE;
+    // Short aliases, because a line is 95 columns and a control clause should
+    // not eat a tenth of it spelling out "resonance".
+    static struct {
+        char const* alias;
+        sd_field_t  field;
+    } const aliases[] = {
+        {"sound", SD_F_S},        {"lpf", SD_F_CUTOFF},   {"res", SD_F_RESONANCE},
+        {"g", SD_F_GAIN},         {"p", SD_F_PAN},        {"c", SD_F_CUTOFF},
+        {"q", SD_F_RESONANCE},    {"nt", SD_F_NOTE},      {"sp", SD_F_SPEED},
+        {"lg", SD_F_LEGATO},      {"atk", SD_F_ATTACK},   {"dec", SD_F_DECAY},
+        {"rel", SD_F_RELEASE},    {"sus", SD_F_SUSTAIN},  {"shp", SD_F_SHAPE},
+        {"rm", SD_F_ROOM},        {"dl", SD_F_DELAY},     {"ob", SD_F_ORBIT},
+    };
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++) {
+        if (strcmp(name, aliases[i].alias) == 0) {
+            return aliases[i].field;
+        }
     }
     return SD_F_COUNT;
 }

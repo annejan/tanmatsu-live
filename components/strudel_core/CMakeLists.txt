@@ -3,6 +3,7 @@ idf_component_register(
 		"sd_frac.c"
 		"sd_pattern.c"
 		"sd_mini.c"
+		"sd_line.c"
 	INCLUDE_DIRS
 		"include"
 )
