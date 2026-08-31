@@ -20,7 +20,7 @@ static char const TAG[] = "audio";
 
 #define SAMPLE_RATE 48000
 #define BLOCK       256  // 5.3 ms, short enough that a keystroke feels instant
-#define ARENA_BYTES (28 * 1024)
+#define ARENA_BYTES (48 * 1024)
 #define MAX_EVENTS  64
 #define MAX_HAPS    48
 #define LANE_STEPS  16
@@ -99,98 +99,10 @@ static void trim(char const** s, size_t* len) {
     }
 }
 
-// The old step grid, "x...x...", stays valid: it is just a compact way of
-// writing a sequence, so it is turned into the same pattern a sequence makes.
-static bool looks_like_grid(char const* s, size_t len) {
-    if (len < 2) {
-        return false;
-    }
-    for (size_t i = 0; i < len; i++) {
-        char c = s[i];
-        if (c == ' ' || c == '\t') {
-            return false;
-        }
-        bool grid = c == 'x' || c == 'X' || c == '.' || c == '~' || c == '-' || c == '_' || (c >= '0' && c <= '9');
-        if (!grid) {
-            return false;
-        }
-    }
-    return true;
-}
 
-static sd_pat_t* grid_to_pattern(sd_arena_t* a, char const* s, size_t len) {
-    sd_pat_t* kids[64];
-    int       n = 0;
-    for (size_t i = 0; i < len && n < 64; i++) {
-        char c = s[i];
-        if (c == '.' || c == '~' || c == '-' || c == '_') {
-            kids[n++] = sd_silence(a);
-        } else if (c >= '1' && c <= '9') {
-            kids[n++] = sd_pure_num(a, (double)(c - '0'));
-        } else {
-            char w[2] = {c, 0};
-            kids[n++] = sd_pure_word(a, w, -1);
-        }
-    }
-    return n ? sd_fastcat(a, kids, n) : sd_silence(a);
-}
 
-// gain, pan and friends are 0..1 style, which is what makes a per step digit
-// grid worth having: 9 is full, 0 is nothing, and a dot leaves the step alone.
-static bool is_unit_field(sd_field_t f) {
-    return f == SD_F_GAIN || f == SD_F_PAN || f == SD_F_RESONANCE || f == SD_F_SUSTAIN || f == SD_F_SHAPE ||
-           f == SD_F_ROOM || f == SD_F_DELAY;
-}
 
-static sd_pat_t* ninths_pattern(sd_arena_t* a, char const* s, size_t len) {
-    sd_pat_t* kids[64];
-    int       n = 0;
-    for (size_t i = 0; i < len && n < 64; i++) {
-        char c = s[i];
-        if (c >= '0' && c <= '9') {
-            kids[n++] = sd_pure_num(a, (double)(c - '0') / 9.0);
-        } else {
-            kids[n++] = sd_silence(a);
-        }
-    }
-    return n ? sd_fastcat(a, kids, n) : sd_silence(a);
-}
 
-// A run of digits and rests is a per step grid; anything a strtod swallows
-// whole is a plain number; everything else is mini notation.
-static sd_pat_t* clause_pattern(sd_arena_t* a, sd_field_t f, char const* v, size_t len, char* err, size_t errlen) {
-    char buf[128];
-    size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-    memcpy(buf, v, n);
-    buf[n] = 0;
-
-    bool all_grid = n >= 2, has_digit = false, all_digits = n >= 2;
-    for (size_t i = 0; i < n; i++) {
-        char c = buf[i];
-        bool digit = c >= '0' && c <= '9';
-        bool rest  = c == '.' || c == '~' || c == '-' || c == '_';
-        has_digit |= digit;
-        all_digits &= digit;
-        all_grid &= (digit || rest);
-    }
-
-    char*  end = NULL;
-    double dv  = strtod(buf, &end);
-    bool   whole_number = end && *end == 0 && end != buf;
-
-    if (is_unit_field(f) && all_grid && has_digit && (!whole_number || all_digits)) {
-        return ninths_pattern(a, buf, n);
-    }
-    if (whole_number) {
-        return sd_pure_num(a, dv);
-    }
-    char perr[64] = "";
-    sd_pat_t* p = sd_mini_parse(a, buf, 7919, perr, sizeof(perr));
-    if (!p && err && errlen) {
-        snprintf(err, errlen, "%s", perr);
-    }
-    return p;
-}
 
 static float field_default(sd_field_t f, seq_line_t const* ln) {
     switch (f) {
@@ -305,62 +217,25 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
     out->orbit = out->melodic ? 1 : 0;
 
     sd_line_t sl;
-    char      serr[64] = "";
+    char      serr[80] = "";
     if (!sd_line_split(src, len, &sl, serr, sizeof(serr))) {
         snprintf(err, errlen, "line %d: %s", editor_line + 1, serr);
         return false;
     }
-    if (sl.structure_len == 0) {
-        snprintf(err, errlen, "line %d: no pattern", editor_line + 1);
+
+    // What a control holds before any clause touches it, which is what += and
+    // *= combine with
+    float defaults[SD_F_COUNT] = {0};
+    for (int i = 0; i < SD_F_COUNT; i++) {
+        defaults[i] = field_default((sd_field_t)i, out);
+    }
+
+    out->pat = sd_line_pattern(a, &sl, (uint32_t)(editor_line * 7919 + 13), defaults, serr, sizeof(serr));
+    if (!out->pat) {
+        snprintf(err, errlen, "line %d: %s", editor_line + 1, serr);
         return false;
     }
-
-    sd_pat_t* pat = NULL;
-    if (looks_like_grid(sl.structure, sl.structure_len)) {
-        pat = grid_to_pattern(a, sl.structure, sl.structure_len);
-    } else {
-        char   buf[192];
-        size_t n = sl.structure_len < sizeof(buf) - 1 ? sl.structure_len : sizeof(buf) - 1;
-        memcpy(buf, sl.structure, n);
-        buf[n]        = 0;
-        char perr[64] = "";
-        pat           = sd_mini_parse(a, buf, (uint32_t)(editor_line * 7919 + 13), perr, sizeof(perr));
-        if (!pat) {
-            snprintf(err, errlen, "line %d: %s", editor_line + 1, perr);
-            return false;
-        }
-    }
-
-    // Fold each control clause onto the structure. Taking structure from the
-    // left is what keeps the rhythm the pattern's and the values the clause's.
-    uint32_t seeded = 0;
-    for (int i = 0; i < sl.nclauses; i++) {
-        sd_field_t f = sd_field_from_name(sl.clause[i].field);
-        if (f == SD_F_COUNT) {
-            snprintf(err, errlen, "line %d: unknown control '%s'", editor_line + 1, sl.clause[i].field);
-            return false;
-        }
-        char      cerr[64] = "";
-        sd_pat_t* vp       = clause_pattern(a, f, sl.clause[i].value, sl.clause[i].value_len, cerr, sizeof(cerr));
-        if (!vp) {
-            snprintf(err, errlen, "line %d: %s %s", editor_line + 1, sl.clause[i].field, cerr);
-            return false;
-        }
-        sd_op_t op = sl.clause[i].op == SD_LINE_ADD   ? SD_OP_ADD
-                     : sl.clause[i].op == SD_LINE_MUL ? SD_OP_MUL
-                                                      : SD_OP_SET;
-
-        // Adding to or scaling a field needs something already there, so the
-        // field's default is set once before the first such clause touches it.
-        if (op != SD_OP_SET && !(seeded & (1u << f))) {
-            pat = sd_op(a, SD_OP_SET, pat, sd_ctrl(a, f, sd_pure_num(a, field_default(f, out))));
-        }
-        seeded |= (1u << f);
-        pat = sd_op(a, op, pat, sd_ctrl(a, f, vp));
-    }
-
-    out->pat = pat;
-    return out->pat != NULL;
+    return true;
 }
 
 // A 16 slot summary of one cycle, purely so the UI can draw a lane.

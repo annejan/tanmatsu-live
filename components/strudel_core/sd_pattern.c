@@ -61,7 +61,10 @@ struct sd_pat {
     int        i0, i1, i2;  // euclid k/n/rot, iter n, segment n, ctrl field
     double     d0;          // degrade probability
     uint32_t   seed;
-    sd_hval_t* val;  // PURE only, kept out of line to keep nodes small
+    // PURE only. Storing the bare value rather than a whole control map saves
+    // about a hundred bytes per node, which is the difference between a full
+    // set of sixteen parts fitting the arena and not.
+    sd_val_t*  val;
     sd_op_t    op;
 };
 
@@ -90,12 +93,11 @@ sd_pat_t* sd_pure(sd_arena_t* a, sd_val_t v) {
     if (!p) {
         return NULL;
     }
-    p->val = sd_arena_alloc(a, sizeof(sd_hval_t));
+    p->val = sd_arena_alloc(a, sizeof(sd_val_t));
     if (!p->val) {
         return NULL;
     }
-    p->val->bare = v;
-    p->val->sidx = v.idx;
+    *p->val = v;
     return p;
 }
 
@@ -125,12 +127,27 @@ sd_pat_t* sd_timecat(sd_arena_t* a, sd_pat_t** kids, sd_frac_t const* weights, i
     }
     p->kids  = copy_kids(a, kids, n);
     p->nkids = n;
-    p->w     = sd_arena_alloc(a, sizeof(sd_frac_t) * (size_t)n);
-    if (!p->kids || !p->w) {
+    if (!p->kids) {
+        return NULL;
+    }
+    // Equal weights are the overwhelmingly common case and need no array: a
+    // sixteen step grid was spending 256 bytes storing the number one.
+    bool uniform = true;
+    if (weights) {
+        for (int i = 0; i < n && uniform; i++) {
+            uniform = sd_eq(weights[i], sd_int(1));
+        }
+    }
+    if (uniform) {
+        p->w = NULL;
+        return p;
+    }
+    p->w = sd_arena_alloc(a, sizeof(sd_frac_t) * (size_t)n);
+    if (!p->w) {
         return NULL;
     }
     for (int i = 0; i < n; i++) {
-        p->w[i] = weights ? weights[i] : sd_int(1);
+        p->w[i] = weights[i];
     }
     return p;
 }
@@ -562,7 +579,8 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
                 h.whole.b   = c;
                 h.whole.e   = sd_add(c, sd_int(1));
                 h.part      = piece;
-                h.v         = *p->val;
+                h.v.bare    = *p->val;
+                h.v.sidx    = p->val->idx;
                 haps_push(out, &h);
                 break;
             }
@@ -570,17 +588,18 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
             case P_TIMECAT: {
                 sd_frac_t total = sd_int(0);
                 for (int i = 0; i < p->nkids; i++) {
-                    total = sd_add(total, p->w[i]);
+                    total = sd_add(total, p->w ? p->w[i] : sd_int(1));
                 }
                 if (total.n <= 0) {
                     break;
                 }
                 sd_frac_t acc = sd_int(0);
                 for (int i = 0; i < p->nkids; i++) {
+                    sd_frac_t wi    = p->w ? p->w[i] : sd_int(1);
                     sd_frac_t start = sd_div(acc, total);
-                    sd_frac_t len   = sd_div(p->w[i], total);
+                    sd_frac_t len   = sd_div(wi, total);
                     query_slotted(p, piece, out, c, start, len, p->kids[i]);
-                    acc = sd_add(acc, p->w[i]);
+                    acc = sd_add(acc, wi);
                 }
                 break;
             }

@@ -16,6 +16,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "sd_pattern.h"
+
 #define SD_LINE_MAX_CLAUSES 12
 #define SD_LINE_FIELD_LEN   12
 
@@ -44,3 +46,10 @@ typedef struct {
 
 // Splits src. Returns false and fills err on a malformed clause.
 bool sd_line_split(char const* src, size_t len, sd_line_t* out, char* err, size_t errlen);
+
+// Builds the whole pattern for a split line: the structure, with every control
+// clause folded onto it. defaults is SD_F_COUNT floats giving what a field
+// holds before any clause touches it, which is what += and *= combine with.
+// Returns NULL and fills err on a bad clause or an exhausted arena.
+sd_pat_t* sd_line_pattern(sd_arena_t* a, sd_line_t const* line, uint32_t seed, float const* defaults, char* err,
+                          size_t errlen);
