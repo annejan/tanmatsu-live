@@ -51,9 +51,19 @@ sd_frac_t sd_div(sd_frac_t a, sd_frac_t b) {
 }
 
 int sd_cmp(sd_frac_t a, sd_frac_t b) {
-    __int128 l = (__int128)a.n * b.d;
-    __int128 r = (__int128)b.n * a.d;
-    return l < r ? -1 : (l > r ? 1 : 0);
+    // No 128 bit integers on a 32 bit RISC-V target, so cross multiply in 64
+    // bits and only fall back when that would overflow. Both fractions are
+    // normalized with a positive denominator, so the comparison is exact.
+    if (a.d == b.d) {
+        return a.n < b.n ? -1 : (a.n > b.n ? 1 : 0);
+    }
+    int64_t l, r;
+    if (!__builtin_mul_overflow(a.n, b.d, &l) && !__builtin_mul_overflow(b.n, a.d, &r)) {
+        return l < r ? -1 : (l > r ? 1 : 0);
+    }
+    double x = (double)a.n / (double)a.d;
+    double y = (double)b.n / (double)b.d;
+    return x < y ? -1 : (x > y ? 1 : 0);
 }
 
 int64_t sd_floori(sd_frac_t a) {

@@ -62,7 +62,7 @@ struct sd_pat {
     int         i0, i1, i2;  // euclid k/n/rot, iter n, segment n, ctrl field
     double      d0;          // degrade probability
     uint32_t    seed;
-    sd_hval_t   val;
+    sd_hval_t*  val;  // PURE only, kept out of line to keep nodes small
     sd_op_t     op;
 };
 
@@ -88,10 +88,15 @@ sd_pat_t* sd_silence(sd_arena_t* a) {
 
 sd_pat_t* sd_pure(sd_arena_t* a, sd_val_t v) {
     sd_pat_t* p = node(a, P_PURE);
-    if (p) {
-        p->val.bare = v;
-        p->val.sidx = v.idx;
+    if (!p) {
+        return NULL;
     }
+    p->val = sd_arena_alloc(a, sizeof(sd_hval_t));
+    if (!p->val) {
+        return NULL;
+    }
+    p->val->bare = v;
+    p->val->sidx = v.idx;
     return p;
 }
 
@@ -558,7 +563,7 @@ void sd_query(sd_pat_t const* p, sd_span_t span, sd_haps_t* out) {
                 h.whole.b   = c;
                 h.whole.e   = sd_add(c, sd_int(1));
                 h.part      = piece;
-                h.v         = p->val;
+                h.v         = *p->val;
                 haps_push(out, &h);
                 break;
             }

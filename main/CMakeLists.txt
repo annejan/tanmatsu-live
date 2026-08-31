@@ -9,6 +9,7 @@ idf_component_register(
 		driver
 		badge-bsp
 		strudel_dsp
+		strudel_core
 	INCLUDE_DIRS
 		"."
 )

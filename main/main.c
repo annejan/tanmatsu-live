@@ -88,16 +88,19 @@ static char status[64]      = "";
 static bool status_error    = false;
 
 static char const* const demo[] = {
-    "# tanmatsu live coding  --  F2 eval, F1 play/stop",
-    "bpm 124",
+    "# orange triangle evaluates . red cross plays . esc exits",
+    "bpm 128",
+    "delay 1 0.1875 0.42 0.30",
     "",
-    "bd     x...x...x...x...",
-    "sd     ....x.......x..x",
-    "hh:0.35 x.x.x.x.x.x.x.x.",
-    "cp:0.5 ............x...",
+    "bd      x ~ ~ x ~ ~ x ~",
+    "sd      ~ ~ x ~ ~ ~ x ~",
+    "hh:0.26 x*8?0.2",
+    "oh:0.20 ~ ~ ~ ~ ~ ~ x ~",
+    "cp:0.34 x(3,8,3)",
     "",
-    "saw:0.30:700 c2 . eb2 . g2 . eb2 .",
-    "square:0.12:2400 . c4 . eb4 . g4 . bb4",
+    "saw:0.26:620:0.55   <c2 g1 c2 bb1> ~ [~ c2] ~",
+    "saw:0.11:1500:0.35  [c3 eb3 g3]*2 . <bb2 ab2>",
+    "square:0.06:2600    ~ <c5 eb5> ~ g4",
 };
 
 // ---------------------------------------------------------------------------
@@ -112,7 +115,7 @@ static void ed_load_demo(void) {
     for (int i = 0; i < ed_lines; i++) {
         snprintf(ed[i], sizeof(ed[i]), "%s", demo[i]);
     }
-    cur_row = 3;
+    cur_row = 4;
     cur_col = 0;
 }
 

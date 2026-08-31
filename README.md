@@ -42,47 +42,63 @@ at an existing checkout with a `.IDF_PATH` file or an `esp-idf` symlink.
 
 ## The language
 
-One line is one part. Everything loops on its own length, so parts of different
+One line is one part. Every part loops on its own length, so parts of different
 lengths drift against each other, which is free polymeter.
 
 ```
 # comments start with a hash
-bpm 124
+bpm 128
+delay 1 0.1875 0.42 0.30
 
-bd     x...x...x...x...
-sd     ....x.......x..x
-hh:0.35 x.x.x.x.x.x.x.x.
+bd      x ~ ~ x ~ ~ x ~
+hh:0.26 x*8?0.2
+cp:0.34 x(3,8,3)
 
-saw:0.30:700 c2 . eb2 . g2 . eb2 .
+saw:0.26:620:0.55  <c2 g1 c2 bb1> ~ [~ c2] ~
 ```
 
-**Head token**: `name` or `name:gain` or `name:gain:cutoff` or
-`name:gain:cutoff:resonance`.
+**Head token**: `name`, or `name:gain`, `name:gain:cutoff`,
+`name:gain:cutoff:resonance`. `name` is a drum (`bd sd hh oh cp rim tom`) or a
+waveform (`sine saw square tri noise`).
 
-`name` is a drum (`bd sd hh oh cp rim tom`) or a waveform
-(`sine saw square tri noise`).
+**Pattern**: mini notation, the terse syntax from TidalCycles.
 
-**Steps**: if the rest of the line contains a space it is read as whitespace
-separated tokens, otherwise every character is one step. So drums stay a compact
-grid and melodies stay readable.
-
-| Step | Meaning |
+| | |
 |---|---|
-| `.` `~` `-` `_` | rest |
-| `x` | hit, or the base note on a melodic line |
-| `X` | accent |
-| `1`..`9` | velocity, on a drum line |
-| `c2` `eb3` `f#4` | note name, c3 is midi 48 |
+| `bd sd` | two steps in a cycle |
+| `bd [sd sd]` | brackets subdivide a step |
+| `<bd sd>` | angle brackets pick one per cycle |
+| `bd*4` `bd/2` | faster within the step, or stretched over cycles |
+| `bd(3,8)` `bd(3,8,2)` | euclidean rhythm, third argument rotates |
+| `bd!3` | three separate steps |
+| `bd@3 sd` | first step is three times as wide |
+| `bd _ sd` | `_` extends the previous step |
+| `bd?` `bd?0.3` | randomly drop, optionally with a probability |
+| `bd:2` | sample index |
+| `bd, hh*4` | comma stacks layers |
+| `~` or `.` | a rest |
 
-**Directives**: `bpm <n>`, `gain <0..2>`, `delay <orbit> <time> <feedback> <mix>`.
+Steps are `x` for a hit and `X` for an accent, `1`..`9` for velocity on a drum
+line, and note names like `c2` `eb3` `f#4` on a melodic one, where `c3` is midi
+48. A bare number on a melodic line is a semitone offset from c2.
 
-Drums play on orbit 0, melodic parts on orbit 1, which has the delay by default.
+The older step grid still works and is often clearer for drums: a pattern of
+only `x X . ~ - _ 0-9` with no spaces, such as `bd x...x...x...x...`, is read as
+a grid and turned into the same pattern a sequence would make.
+
+**Directives**: `bpm <n>`, `gain <0..2>`,
+`delay <orbit> <time> <feedback> <mix>`. Drums play on orbit 0 and melodic
+parts on orbit 1, which carries the delay by default.
+
+A line that fails to parse is reported in the footer and skipped; the rest of
+the program keeps playing.
 
 ## Layout
 
 ```
-components/strudel_dsp/   voice engine, pure C, no ESP-IDF, host testable
-main/app_audio.c          parser, step sequencer, I2S task
+components/strudel_core/  pattern algebra and mini notation, no ESP-IDF
+components/strudel_dsp/   voice engine, no ESP-IDF
+main/app_audio.c          line parser, scheduler, I2S task
 main/main.c               editor and drawing
 test/host/                gcc build of the portable parts
 ```
@@ -92,10 +108,9 @@ checks it for NaNs, clipping and silence, without touching hardware.
 
 ## Next
 
-- Move the parser into `components/strudel_core` so it is host testable too
-- Real pattern algebra: `[a b]`, `<a b>`, `a*2`, euclid `bd(3,8)`, `?`
 - Sample playback from the SD card
 - Reverb, per part pan and swing
+- Per step control patterns, so gain and cutoff can be sequenced too
 - Save and load sets
 
 ## License
