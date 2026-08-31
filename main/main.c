@@ -168,12 +168,31 @@ static char const* const tune_dub[] = {
     "square  ~ ~ ~ [c4 eb4]?0.4   g=.05 c=1600 p=<.15 .85>",
 };
 
+// Written entirely in scale degrees. Every number is in key by construction,
+// so the melodic lines can be rewritten at random and still sound intentional.
+static char const* const tune_keys[] = {
+    "# scale degrees . every number is in key . try changing sc=",
+    "bpm 120",
+    "reverb 0.7 0.45 0.28",
+    "room 1 0.35",
+    "swing 0.12",
+    "",
+    "bd      x...x...x...x...",
+    "sd      ....x.......x...",
+    "hh:0.22 x*8 g=39493949",
+    "",
+    "saw     0 ~ 2 ~ 4 ~ 2 ~      sc=minpent root=c2 g=.26 c=<600 1100> q=.5",
+    "saw     [7 9 11 9]*2         sc=minor root=c3 g=.10 c=1800 p=<.35 .65>",
+    "tri     <0 -3 2 4>           sc=minor root=c3 g=.09 c=800",
+};
+
 #define TUNE(v) {#v, v, (int)(sizeof(v) / sizeof((v)[0]))}
 static preset_t const presets[] = {
     {"house", tune_house, (int)(sizeof(tune_house) / sizeof(tune_house[0]))},
     {"break", tune_break, (int)(sizeof(tune_break) / sizeof(tune_break[0]))},
     {"liquid", tune_liquid, (int)(sizeof(tune_liquid) / sizeof(tune_liquid[0]))},
     {"dub", tune_dub, (int)(sizeof(tune_dub) / sizeof(tune_dub[0]))},
+    {"keys", tune_keys, (int)(sizeof(tune_keys) / sizeof(tune_keys[0]))},
 };
 #define PRESET_COUNT ((int)(sizeof(presets) / sizeof(presets[0])))
 

@@ -14,6 +14,7 @@
 #include "sd_line.h"
 #include "sd_mini.h"
 #include "sd_pattern.h"
+#include "sd_scale.h"
 #include "sd_synth.h"
 
 static char const TAG[] = "audio";
@@ -34,7 +35,9 @@ typedef struct {
     char      name[24];
     sd_drum_t drum;
     sd_wave_t wave;
-    bool      melodic;
+    bool       melodic;
+    sd_scale_t scale;
+    float      root_hz;
     float     gain, cutoff, resonance;
     int       orbit;
     sd_pat_t* pat;
@@ -84,6 +87,8 @@ static struct {
     int16_t   line;
     sd_hval_t v;
 } events[MAX_EVENTS];
+
+static bool word_to_note(char const* w, float* out_hz);
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -221,6 +226,45 @@ static bool parse_line(char const* src, size_t len, int editor_line, sd_arena_t*
     if (!sd_line_split(src, len, &sl, serr, sizeof(serr))) {
         snprintf(err, errlen, "line %d: %s", editor_line + 1, serr);
         return false;
+    }
+
+    // A scale and a root are properties of the line rather than controls that
+    // vary per step, so they are taken out before the rest are folded in.
+    out->scale   = SD_SCALE_NONE;
+    out->root_hz = 65.406f;  // c2
+    for (int i = 0; i < sl.nclauses;) {
+        char const* f = sl.clause[i].field;
+        char        v[24];
+        size_t      vn = sl.clause[i].value_len < sizeof(v) - 1 ? sl.clause[i].value_len : sizeof(v) - 1;
+        memcpy(v, sl.clause[i].value, vn);
+        v[vn] = 0;
+
+        bool consumed = false;
+        if (strcmp(f, "sc") == 0 || strcmp(f, "scale") == 0) {
+            out->scale = sd_scale_from_name(v);
+            if (out->scale == SD_SCALE_NONE) {
+                snprintf(err, errlen, "line %d: unknown scale '%s'", editor_line + 1, v);
+                return false;
+            }
+            consumed = true;
+        } else if (strcmp(f, "root") == 0) {
+            float hz;
+            if (!word_to_note(v, &hz)) {
+                snprintf(err, errlen, "line %d: root '%s' is not a note", editor_line + 1, v);
+                return false;
+            }
+            out->root_hz = hz;
+            consumed     = true;
+        }
+
+        if (consumed) {
+            for (int k = i; k < sl.nclauses - 1; k++) {
+                sl.clause[k] = sl.clause[k + 1];
+            }
+            sl.nclauses--;
+        } else {
+            i++;
+        }
     }
 
     // What a control holds before any clause touches it, which is what += and
@@ -373,7 +417,12 @@ static void trigger(seq_line_t const* ln, sd_hval_t const* v, float step_seconds
         }
     } else if (bare->type == SD_V_NUM) {
         if (ln->melodic) {
-            freq = base_hz * powf(2.0f, (float)bare->num / 12.0f);
+            // With a scale the number is a degree, so a run of integers stays
+            // in key; without one it is plain semitones as before.
+            int   semis = ln->scale != SD_SCALE_NONE ? sd_scale_semitone(ln->scale, (int)lround(bare->num))
+                                                     : (int)lround(bare->num);
+            float root  = ln->scale != SD_SCALE_NONE ? ln->root_hz : base_hz;
+            freq        = root * powf(2.0f, (float)semis / 12.0f);
         } else {
             accent = (float)bare->num / 9.0f;  // 1..9 is a velocity
         }

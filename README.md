@@ -111,6 +111,22 @@ is eight steps. Write a decimal point when you mean a plain number: `g=.5`.
 The head's `name:gain:cutoff:resonance` shorthand still works and is just a
 shorter way of writing the first three clauses.
 
+**Scales**: `sc=` picks a scale and `root=` its root, after which a bare number
+in the pattern is a scale degree rather than a semitone. Every note is then in
+key by construction, which matters more on a badge than in a DAW: there is no
+piano roll to fix a wrong note in, and a set is played once.
+
+```
+saw  0 ~ 2 ~ 4 ~ 2 ~   sc=minpent root=c2
+saw  [7 9 11 9]*2      sc=minor root=c3
+tri  <0 -3 2 4>        sc=minor root=c3
+```
+
+Degrees past the end of the scale keep climbing into the next octave, and
+negative degrees go below the root. Scales: `major` `minor` `dorian`
+`phrygian` `lydian` `mixolydian` `locrian` `harmonic` `majpent` `minpent`
+`blues` `chromatic`, plus `aeolian` `ionian` `pent` as aliases.
+
 **Directives**: `bpm <n>`, `gain <0..2>`, `swing <0..0.75>`,
 `delay <orbit> <time> <feedback> <mix>`, `reverb <size> <damp> <mix>`,
 `room <orbit> <send>`. Drums play on orbit 0 and melodic parts on orbit 1,
@@ -121,9 +137,9 @@ the program keeps playing.
 
 ## Starter tunes
 
-F6 cycles four of them: `house`, `break` (a breakbeat in the amen idiom at
-174), `liquid` (rolling two step drum and bass) and `dub` (sparse, mostly
-delay). They are ordinary editor buffers, so every one of them is something you
+F6 cycles five of them: `house`, `break` (a breakbeat in the amen idiom at
+174), `liquid` (rolling two step drum and bass), `dub` (sparse, mostly delay)
+and `keys` (written entirely in scale degrees). They are ordinary editor buffers, so every one of them is something you
 could have typed, and every one can be pulled apart while it plays.
 
 ## Saving sets
