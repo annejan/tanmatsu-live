@@ -25,7 +25,7 @@ make build DEVICE=tanmatsu
 make flash DEVICE=tanmatsu PORT=/dev/ttyACM0
 ```
 
-The build needs ESP-IDF v6.0.2. Either run `make prepare`, or point the project
+The build needs ESP-IDF v6.0.3. Either run `make prepare`, or point the project
 at an existing checkout with a `.IDF_PATH` file or an `esp-idf` symlink.
 
 ## Keys
@@ -190,14 +190,6 @@ checks it for NaNs, clipping and silence, without touching hardware.
 
 Nothing here has run on hardware since the pattern engine landed, so the first
 job is a session with the badge rather than any of the below.
-
-**Accepted but inert.** `rm=` and `dl=` set a field the synth never reads,
-because the sends are per orbit rather than per voice, and `sp=` only does
-anything once a sample is playing. They should either work or be refused.
-
-**Silent drops.** A query is capped at 48 events and a block at 64. Something
-like `hh x*64` exceeds that and loses notes with no indication; the overflow
-flag exists and nothing reads it.
 
 **Sample playback.** The voice engine already has the sampler path, including
 interpolation and speed, and nothing feeds it. Needs a WAV loader and a bank on

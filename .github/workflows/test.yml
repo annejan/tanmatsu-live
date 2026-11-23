@@ -12,12 +12,12 @@ jobs:
     # plugged in.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build and run host tests
         run: make -C test/host check
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: beat
           path: test/host/beat.wav
@@ -26,7 +26,7 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Voice engine throughput
         run: make -C test/host bench
 
@@ -35,9 +35,9 @@ jobs:
     # exists because a 128 bit integer in the fraction comparison compiled
     # happily on the host and does not exist at all on 32 bit RISC-V.
     runs-on: ubuntu-latest
-    container: espressif/idf:v6.0.2
+    container: espressif/idf:v6.0.3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build for Tanmatsu
         shell: bash
@@ -49,7 +49,7 @@ jobs:
             -DIDF_TARGET=esp32p4 -DFAT=0 \
             build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tanmatsu-live.bin
           path: build/tanmatsu/tanmatsu-live.bin

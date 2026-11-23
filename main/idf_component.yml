@@ -1,4 +1,4 @@
 dependencies:
-  idf: ">=6.0.2"
-  badgeteam/badge-bsp: "=1.1.0"
+  idf: ">=6.0.3"
+  badgeteam/badge-bsp: "=2.0.3"
   robotman2412/pax-gfx: "=2.2.2"
