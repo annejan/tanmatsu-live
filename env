@@ -1,4 +1,4 @@
-IDF_VERSION=v6.0.2
+IDF_VERSION=v6.0.3
 
 if [ -f .IDF_PATH ]; then
     export IDF_PATH=$(cat .IDF_PATH)

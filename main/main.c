@@ -684,6 +684,11 @@ static void render(void) {
     if (pax_buf_get_width(&fb) == 0) {
         return;
     }
+    // The blit returns while the panel is still reading the buffer, so drawing
+    // straight into it would tear the frame that is still on its way out.
+    if (bsp_display_wait(100) != ESP_OK) {
+        ESP_LOGW(TAG, "Previous frame still flushing");
+    }
     int64_t t0    = esp_timer_get_time();
     int     first = ed_first_visible();
     if (first != ed_scroll) {
